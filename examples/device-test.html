@@ -1,0 +1,368 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>设备测试 - MicroVibe</title>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      min-height: 100vh;
+      padding: 20px;
+    }
+
+    .container {
+      max-width: 800px;
+      margin: 0 auto;
+      background: white;
+      border-radius: 16px;
+      padding: 30px;
+      box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+    }
+
+    h1 {
+      color: #1f2937;
+      margin-bottom: 10px;
+    }
+
+    .subtitle {
+      color: #6b7280;
+      margin-bottom: 30px;
+    }
+
+    .section {
+      margin-bottom: 30px;
+      padding: 20px;
+      background: #f9fafb;
+      border-radius: 8px;
+    }
+
+    .section h2 {
+      color: #1f2937;
+      margin-bottom: 15px;
+      font-size: 18px;
+    }
+
+    video {
+      width: 100%;
+      max-width: 640px;
+      border-radius: 8px;
+      background: #000;
+      display: block;
+      margin: 15px auto;
+    }
+
+    .btn {
+      padding: 12px 24px;
+      border: none;
+      border-radius: 8px;
+      font-size: 16px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.3s;
+      margin: 5px;
+    }
+
+    .btn-primary {
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      color: white;
+    }
+
+    .btn-primary:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 5px 15px rgba(102, 126, 234, 0.4);
+    }
+
+    .btn-primary:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+    }
+
+    .device-list {
+      list-style: none;
+      padding: 0;
+    }
+
+    .device-list li {
+      padding: 10px;
+      margin: 5px 0;
+      background: white;
+      border-radius: 6px;
+      border-left: 3px solid #667eea;
+    }
+
+    .device-kind {
+      display: inline-block;
+      padding: 2px 8px;
+      background: #667eea;
+      color: white;
+      border-radius: 4px;
+      font-size: 12px;
+      margin-right: 8px;
+    }
+
+    .log {
+      background: #1f2937;
+      color: #e5e7eb;
+      padding: 15px;
+      border-radius: 8px;
+      font-family: 'Monaco', 'Courier New', monospace;
+      font-size: 13px;
+      max-height: 300px;
+      overflow-y: auto;
+      line-height: 1.8;
+    }
+
+    .log-entry {
+      margin: 5px 0;
+    }
+
+    .log-success { color: #10b981; }
+    .log-error { color: #ef4444; }
+    .log-info { color: #3b82f6; }
+
+    .constraints {
+      background: white;
+      padding: 10px;
+      border-radius: 6px;
+      margin-top: 10px;
+      font-family: 'Monaco', 'Courier New', monospace;
+      font-size: 12px;
+      white-space: pre-wrap;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>🎥 设备测试工具</h1>
+    <p class="subtitle">测试你的摄像头和麦克风是否正常工作</p>
+
+    <!-- 设备枚举 -->
+    <div class="section">
+      <h2>1. 检测可用设备</h2>
+      <button class="btn btn-primary" onclick="enumerateDevices()">🔍 检测设备</button>
+      <ul class="device-list" id="deviceList"></ul>
+    </div>
+
+    <!-- 基本测试 -->
+    <div class="section">
+      <h2>2. 基本媒体流测试（无约束）</h2>
+      <button class="btn btn-primary" id="basicBtn" onclick="testBasic()">▶️ 启动基本测试</button>
+      <button class="btn btn-primary" id="stopBasicBtn" onclick="stopBasic()" disabled>⏹️ 停止</button>
+      <video id="basicVideo" autoplay muted playsinline></video>
+    </div>
+
+    <!-- 高清测试 -->
+    <div class="section">
+      <h2>3. 高清媒体流测试（720p）</h2>
+      <button class="btn btn-primary" id="hdBtn" onclick="testHD()">▶️ 启动 720p 测试</button>
+      <button class="btn btn-primary" id="stopHdBtn" onclick="stopHD()" disabled>⏹️ 停止</button>
+      <video id="hdVideo" autoplay muted playsinline></video>
+      <div class="constraints" id="hdConstraints"></div>
+    </div>
+
+    <!-- 日志 -->
+    <div class="section">
+      <h2>📋 日志</h2>
+      <div class="log" id="log"></div>
+    </div>
+  </div>
+
+  <script>
+    let basicStream = null;
+    let hdStream = null;
+
+    // 日志输出
+    function log(message, type = 'info') {
+      const logDiv = document.getElementById('log');
+      const time = new Date().toLocaleTimeString();
+      const className = `log-${type}`;
+      const entry = document.createElement('div');
+      entry.className = `log-entry ${className}`;
+      entry.textContent = `[${time}] ${message}`;
+      logDiv.appendChild(entry);
+      logDiv.scrollTop = logDiv.scrollHeight;
+      console.log(message);
+    }
+
+    // 枚举设备
+    async function enumerateDevices() {
+      try {
+        log('正在检测设备...', 'info');
+
+        // 先请求权限，否则 enumerateDevices 可能返回空标签
+        try {
+          const tempStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+          tempStream.getTracks().forEach(track => track.stop());
+          log('✅ 已获取设备权限', 'success');
+        } catch (err) {
+          log('⚠️ 无法获取设备权限，设备信息可能不完整', 'error');
+        }
+
+        const devices = await navigator.mediaDevices.enumerateDevices();
+        log(`检测到 ${devices.length} 个设备`, 'info');
+
+        const listDiv = document.getElementById('deviceList');
+        listDiv.innerHTML = '';
+
+        let videoCount = 0, audioInCount = 0, audioOutCount = 0;
+
+        devices.forEach((device, index) => {
+          const li = document.createElement('li');
+          let kindLabel = '';
+
+          if (device.kind === 'videoinput') {
+            kindLabel = '📹 摄像头';
+            videoCount++;
+          } else if (device.kind === 'audioinput') {
+            kindLabel = '🎤 麦克风';
+            audioInCount++;
+          } else if (device.kind === 'audiooutput') {
+            kindLabel = '🔊 扬声器';
+            audioOutCount++;
+          }
+
+          const label = device.label || `${kindLabel} ${index + 1}`;
+          li.innerHTML = `<span class="device-kind">${kindLabel}</span>${label}`;
+          listDiv.appendChild(li);
+        });
+
+        log(`✅ 检测完成: ${videoCount} 个摄像头, ${audioInCount} 个麦克风, ${audioOutCount} 个扬声器`, 'success');
+
+        if (videoCount === 0 && audioInCount === 0) {
+          log('❌ 警告: 未检测到任何输入设备！', 'error');
+        }
+
+      } catch (error) {
+        log(`❌ 设备检测失败: ${error.message}`, 'error');
+        console.error(error);
+      }
+    }
+
+    // 基本测试
+    async function testBasic() {
+      try {
+        log('正在启动基本测试（无约束）...', 'info');
+        document.getElementById('basicBtn').disabled = true;
+
+        basicStream = await navigator.mediaDevices.getUserMedia({
+          video: true,
+          audio: true
+        });
+
+        document.getElementById('basicVideo').srcObject = basicStream;
+        document.getElementById('stopBasicBtn').disabled = false;
+
+        const videoTrack = basicStream.getVideoTracks()[0];
+        const audioTrack = basicStream.getAudioTracks()[0];
+        const settings = videoTrack.getSettings();
+
+        log(`✅ 基本测试成功！`, 'success');
+        log(`视频: ${settings.width}x${settings.height} @ ${settings.frameRate}fps`, 'info');
+        log(`音频: ${audioTrack.label}`, 'info');
+
+      } catch (error) {
+        log(`❌ 基本测试失败: ${error.name} - ${error.message}`, 'error');
+        console.error(error);
+        document.getElementById('basicBtn').disabled = false;
+      }
+    }
+
+    function stopBasic() {
+      if (basicStream) {
+        basicStream.getTracks().forEach(track => track.stop());
+        basicStream = null;
+        document.getElementById('basicVideo').srcObject = null;
+        document.getElementById('basicBtn').disabled = false;
+        document.getElementById('stopBasicBtn').disabled = true;
+        log('基本测试已停止', 'info');
+      }
+    }
+
+    // 高清测试
+    async function testHD() {
+      try {
+        log('正在启动 720p 测试...', 'info');
+        document.getElementById('hdBtn').disabled = true;
+
+        const constraints = {
+          video: {
+            width: { ideal: 1280 },
+            height: { ideal: 720 },
+            frameRate: { ideal: 30 }
+          },
+          audio: {
+            echoCancellation: true,
+            noiseSuppression: true,
+            autoGainControl: true
+          }
+        };
+
+        document.getElementById('hdConstraints').textContent =
+          'Constraints:\n' + JSON.stringify(constraints, null, 2);
+
+        hdStream = await navigator.mediaDevices.getUserMedia(constraints);
+
+        document.getElementById('hdVideo').srcObject = hdStream;
+        document.getElementById('stopHdBtn').disabled = false;
+
+        const videoTrack = hdStream.getVideoTracks()[0];
+        const audioTrack = hdStream.getAudioTracks()[0];
+        const settings = videoTrack.getSettings();
+        const capabilities = videoTrack.getCapabilities();
+
+        log(`✅ 720p 测试成功！`, 'success');
+        log(`实际分辨率: ${settings.width}x${settings.height} @ ${settings.frameRate}fps`, 'info');
+        log(`支持分辨率范围: ${capabilities.width.min}-${capabilities.width.max} x ${capabilities.height.min}-${capabilities.height.max}`, 'info');
+        log(`音频: ${audioTrack.label}`, 'info');
+
+      } catch (error) {
+        log(`❌ 720p 测试失败: ${error.name} - ${error.message}`, 'error');
+
+        if (error.name === 'OverconstrainedError') {
+          log('尝试降级到较低分辨率...', 'info');
+          try {
+            hdStream = await navigator.mediaDevices.getUserMedia({
+              video: { width: { ideal: 640 }, height: { ideal: 480 } },
+              audio: true
+            });
+            document.getElementById('hdVideo').srcObject = hdStream;
+            document.getElementById('stopHdBtn').disabled = false;
+            log('✅ 降级到 VGA (640x480) 成功', 'success');
+          } catch (fallbackError) {
+            log(`❌ 降级也失败了: ${fallbackError.message}`, 'error');
+            document.getElementById('hdBtn').disabled = false;
+          }
+        } else {
+          console.error(error);
+          document.getElementById('hdBtn').disabled = false;
+        }
+      }
+    }
+
+    function stopHD() {
+      if (hdStream) {
+        hdStream.getTracks().forEach(track => track.stop());
+        hdStream = null;
+        document.getElementById('hdVideo').srcObject = null;
+        document.getElementById('hdBtn').disabled = false;
+        document.getElementById('stopHdBtn').disabled = true;
+        log('720p 测试已停止', 'info');
+      }
+    }
+
+    // 页面加载时自动检测设备
+    window.addEventListener('load', () => {
+      log('设备测试工具已加载', 'info');
+      log('请点击"检测设备"开始测试', 'info');
+    });
+  </script>
+</body>
+</html>

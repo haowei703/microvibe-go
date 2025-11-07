@@ -1,0 +1,72 @@
+# MicroVibe 本地开发 Caddy 配置
+# 同时代理前端（localhost:3000）和后端（localhost:8080）
+
+http://localhost:8888 {
+    # 日志配置
+    log {
+        output file /tmp/caddy-microvibe.log
+        format json
+        level INFO
+    }
+
+    # API 路由代理到后端
+    handle /api/* {
+        reverse_proxy localhost:8080 {
+            # 透明代理，保留原始请求信息
+            header_up Host {host}
+            header_up X-Real-IP {remote_host}
+            header_up X-Forwarded-For {remote_host}
+            header_up X-Forwarded-Proto {scheme}
+        }
+    }
+
+    # WebSocket 路由（直播、聊天等）
+    handle /ws/* {
+        reverse_proxy localhost:8080 {
+            header_up Connection {>Connection}
+            header_up Upgrade {>Upgrade}
+            header_up Host {host}
+            header_up X-Real-IP {remote_host}
+            header_up X-Forwarded-For {remote_host}
+        }
+    }
+
+    # 静态文件（上传的视频、图片等）
+    handle /uploads/* {
+        reverse_proxy localhost:8080
+    }
+
+    # 健康检查
+    handle /health {
+        reverse_proxy localhost:8080
+    }
+
+    # 前端资源代理到 Nuxt 开发服务器
+    # 特殊处理：_nuxt 目录（Nuxt 构建资源）
+    handle /_nuxt/* {
+        reverse_proxy localhost:3000 {
+            header_up Host {host}
+            header_up X-Real-IP {remote_host}
+            header_up X-Forwarded-For {remote_host}
+            header_up X-Forwarded-Proto {scheme}
+        }
+    }
+
+    # 热更新 WebSocket (Nuxt/Vite HMR)
+    handle /__nuxt_devtools__/* {
+        reverse_proxy localhost:3000 {
+            header_up Connection {>Connection}
+            header_up Upgrade {>Upgrade}
+        }
+    }
+
+    # 默认路由：代理到前端
+    handle {
+        reverse_proxy localhost:3000 {
+            header_up Host {host}
+            header_up X-Real-IP {remote_host}
+            header_up X-Forwarded-For {remote_host}
+            header_up X-Forwarded-Proto {scheme}
+        }
+    }
+}

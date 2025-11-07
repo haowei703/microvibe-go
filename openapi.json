@@ -1,0 +1,2953 @@
+{
+  "openapi": "3.0.3",
+  "info": {
+    "title": "MicroVibe-Go API",
+    "description": "基于 AI 推荐算法的多端短视频平台后端 API，提供视频推荐、社交互动、直播等功能",
+    "version": "1.0.0",
+    "contact": {
+      "name": "MicroVibe Team"
+    }
+  },
+  "servers": [
+    {
+      "url": "http://localhost:8080",
+      "description": "本地开发环境"
+    },
+    {
+      "url": "https://api.microvibe.com",
+      "description": "生产环境"
+    }
+  ],
+  "tags": [
+    {
+      "name": "健康检查",
+      "description": "系统健康检查接口"
+    },
+    {
+      "name": "认证",
+      "description": "用户注册和登录"
+    },
+    {
+      "name": "用户",
+      "description": "用户信息管理"
+    },
+    {
+      "name": "视频",
+      "description": "视频上传、推荐、互动"
+    },
+    {
+      "name": "评论",
+      "description": "评论管理"
+    },
+    {
+      "name": "直播",
+      "description": "直播间管理和互动"
+    },
+    {
+      "name": "OAuth",
+      "description": "第三方登录认证"
+    },
+    {
+      "name": "搜索",
+      "description": "搜索功能"
+    },
+    {
+      "name": "消息",
+      "description": "私信聊天"
+    },
+    {
+      "name": "通知",
+      "description": "系统通知"
+    },
+    {
+      "name": "话题",
+      "description": "话题标签管理"
+    }
+  ],
+  "paths": {
+    "/health": {
+      "get": {
+        "summary": "健康检查",
+        "tags": ["健康检查"],
+        "responses": {
+          "200": {
+            "description": "系统正常",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "status": {
+                      "type": "string",
+                      "example": "ok"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/ping": {
+      "get": {
+        "summary": "Ping 测试",
+        "tags": ["健康检查"],
+        "responses": {
+          "200": {
+            "description": "Pong",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "message": {
+                      "type": "string",
+                      "example": "pong"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/auth/register": {
+      "post": {
+        "summary": "用户注册",
+        "tags": ["认证"],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RegisterRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "注册成功",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/Response"
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "data": {
+                          "type": "object",
+                          "properties": {
+                            "user": {
+                              "$ref": "#/components/schemas/User"
+                            },
+                            "token": {
+                              "type": "string",
+                              "description": "JWT Token"
+                            }
+                          }
+                        }
+                      }
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/InvalidParam"
+          }
+        }
+      }
+    },
+    "/api/v1/auth/login": {
+      "post": {
+        "summary": "用户登录",
+        "tags": ["认证"],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/LoginRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "登录成功",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/Response"
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "data": {
+                          "type": "object",
+                          "properties": {
+                            "user": {
+                              "$ref": "#/components/schemas/User"
+                            },
+                            "token": {
+                              "type": "string",
+                              "description": "JWT Token"
+                            }
+                          }
+                        }
+                      }
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/InvalidParam"
+          }
+        }
+      }
+    },
+    "/api/v1/oauth/login": {
+      "get": {
+        "summary": "第三方登录",
+        "tags": ["OAuth"],
+        "parameters": [
+          {
+            "name": "provider",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "enum": ["github", "google", "wechat"]
+            },
+            "description": "OAuth 提供商"
+          }
+        ],
+        "responses": {
+          "302": {
+            "description": "重定向到 OAuth 提供商登录页面"
+          }
+        }
+      }
+    },
+    "/api/v1/oauth/callback": {
+      "get": {
+        "summary": "OAuth 回调",
+        "tags": ["OAuth"],
+        "parameters": [
+          {
+            "name": "code",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "授权码"
+          },
+          {
+            "name": "state",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "状态参数"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "登录成功",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/Response"
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "data": {
+                          "type": "object",
+                          "properties": {
+                            "user": {
+                              "$ref": "#/components/schemas/User"
+                            },
+                            "token": {
+                              "type": "string",
+                              "description": "JWT Token"
+                            }
+                          }
+                        }
+                      }
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/InvalidParam"
+          }
+        }
+      }
+    },
+    "/api/v1/users/{id}": {
+      "get": {
+        "summary": "获取用户信息",
+        "tags": ["用户"],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            },
+            "description": "用户ID"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "成功",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/Response"
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "data": {
+                          "$ref": "#/components/schemas/User"
+                        }
+                      }
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          }
+        }
+      }
+    },
+    "/api/v1/users/me": {
+      "get": {
+        "summary": "获取当前用户信息",
+        "tags": ["用户"],
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "成功",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/Response"
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "data": {
+                          "$ref": "#/components/schemas/User"
+                        }
+                      }
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          }
+        }
+      },
+      "put": {
+        "summary": "更新用户信息",
+        "tags": ["用户"],
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "nickname": {
+                    "type": "string"
+                  },
+                  "avatar": {
+                    "type": "string"
+                  },
+                  "signature": {
+                    "type": "string"
+                  },
+                  "gender": {
+                    "type": "integer",
+                    "enum": [0, 1, 2]
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Success"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          }
+        }
+      }
+    },
+    "/api/v1/users/{id}/follow": {
+      "post": {
+        "summary": "关注用户",
+        "tags": ["用户"],
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            },
+            "description": "目标用户ID"
+          }
+        ],
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Success"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          }
+        }
+      },
+      "delete": {
+        "summary": "取消关注",
+        "tags": ["用户"],
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            },
+            "description": "目标用户ID"
+          }
+        ],
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Success"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          }
+        }
+      }
+    },
+    "/api/v1/users/{id}/videos": {
+      "get": {
+        "summary": "获取用户的视频列表",
+        "tags": ["视频"],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            },
+            "description": "用户ID"
+          },
+          {
+            "$ref": "#/components/parameters/Page"
+          },
+          {
+            "$ref": "#/components/parameters/PageSize"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "成功",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/Response"
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "data": {
+                          "$ref": "#/components/schemas/PageData"
+                        }
+                      }
+                    }
+                  ]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/videos/feed": {
+      "get": {
+        "summary": "获取推荐视频流",
+        "tags": ["视频"],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/Page"
+          },
+          {
+            "$ref": "#/components/parameters/PageSize"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "成功",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/Response"
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "data": {
+                          "$ref": "#/components/schemas/PageData"
+                        }
+                      }
+                    }
+                  ]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/videos/hot": {
+      "get": {
+        "summary": "获取热门视频",
+        "tags": ["视频"],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/Page"
+          },
+          {
+            "$ref": "#/components/parameters/PageSize"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "成功",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/Response"
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "data": {
+                          "$ref": "#/components/schemas/PageData"
+                        }
+                      }
+                    }
+                  ]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/videos/follow": {
+      "get": {
+        "summary": "获取关注的人的视频",
+        "tags": ["视频"],
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/Page"
+          },
+          {
+            "$ref": "#/components/parameters/PageSize"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "成功",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/Response"
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "data": {
+                          "$ref": "#/components/schemas/PageData"
+                        }
+                      }
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          }
+        }
+      }
+    },
+    "/api/v1/videos/{id}": {
+      "get": {
+        "summary": "获取视频详情",
+        "tags": ["视频"],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            },
+            "description": "视频ID"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "成功",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/Response"
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "data": {
+                          "$ref": "#/components/schemas/Video"
+                        }
+                      }
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          }
+        }
+      },
+      "put": {
+        "summary": "更新视频信息",
+        "tags": ["视频"],
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            },
+            "description": "视频ID"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "title": {
+                    "type": "string"
+                  },
+                  "description": {
+                    "type": "string"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Success"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          }
+        }
+      },
+      "delete": {
+        "summary": "删除视频",
+        "tags": ["视频"],
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            },
+            "description": "视频ID"
+          }
+        ],
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Success"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          }
+        }
+      }
+    },
+    "/api/v1/videos": {
+      "post": {
+        "summary": "上传视频",
+        "tags": ["视频"],
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateVideoRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "成功",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/Response"
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "data": {
+                          "$ref": "#/components/schemas/Video"
+                        }
+                      }
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          }
+        }
+      }
+    },
+    "/api/v1/videos/{id}/like": {
+      "post": {
+        "summary": "点赞视频",
+        "tags": ["视频"],
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            },
+            "description": "视频ID"
+          }
+        ],
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Success"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          }
+        }
+      },
+      "delete": {
+        "summary": "取消点赞",
+        "tags": ["视频"],
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            },
+            "description": "视频ID"
+          }
+        ],
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Success"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          }
+        }
+      }
+    },
+    "/api/v1/videos/{id}/favorite": {
+      "post": {
+        "summary": "收藏视频",
+        "tags": ["视频"],
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            },
+            "description": "视频ID"
+          }
+        ],
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Success"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          }
+        }
+      },
+      "delete": {
+        "summary": "取消收藏",
+        "tags": ["视频"],
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            },
+            "description": "视频ID"
+          }
+        ],
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Success"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          }
+        }
+      }
+    },
+    "/api/v1/comments": {
+      "post": {
+        "summary": "创建评论",
+        "tags": ["评论"],
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateCommentRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "成功",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/Response"
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "data": {
+                          "$ref": "#/components/schemas/Comment"
+                        }
+                      }
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          }
+        }
+      }
+    },
+    "/api/v1/comments/video/{video_id}": {
+      "get": {
+        "summary": "获取视频评论列表",
+        "tags": ["评论"],
+        "parameters": [
+          {
+            "name": "video_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            },
+            "description": "视频ID"
+          },
+          {
+            "$ref": "#/components/parameters/Page"
+          },
+          {
+            "$ref": "#/components/parameters/PageSize"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "成功",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/Response"
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "data": {
+                          "$ref": "#/components/schemas/PageData"
+                        }
+                      }
+                    }
+                  ]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/comments/{id}": {
+      "get": {
+        "summary": "获取评论详情",
+        "tags": ["评论"],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            },
+            "description": "评论ID"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "成功",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/Response"
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "data": {
+                          "$ref": "#/components/schemas/Comment"
+                        }
+                      }
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          }
+        }
+      },
+      "delete": {
+        "summary": "删除评论",
+        "tags": ["评论"],
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            },
+            "description": "评论ID"
+          }
+        ],
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Success"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          }
+        }
+      }
+    },
+    "/api/v1/comments/{id}/replies": {
+      "get": {
+        "summary": "获取评论回复列表",
+        "tags": ["评论"],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            },
+            "description": "评论ID"
+          },
+          {
+            "$ref": "#/components/parameters/Page"
+          },
+          {
+            "$ref": "#/components/parameters/PageSize"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "成功",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Response"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/comments/{id}/like": {
+      "post": {
+        "summary": "点赞评论",
+        "tags": ["评论"],
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            },
+            "description": "评论ID"
+          }
+        ],
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Success"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          }
+        }
+      },
+      "delete": {
+        "summary": "取消点赞评论",
+        "tags": ["评论"],
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            },
+            "description": "评论ID"
+          }
+        ],
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Success"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          }
+        }
+      }
+    },
+    "/api/v1/live/list": {
+      "get": {
+        "summary": "获取直播列表",
+        "tags": ["直播"],
+        "parameters": [
+          {
+            "name": "status",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "enum": ["waiting", "live", "ended"]
+            },
+            "description": "状态过滤"
+          },
+          {
+            "$ref": "#/components/parameters/Page"
+          },
+          {
+            "$ref": "#/components/parameters/PageSize"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "成功",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/Response"
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "data": {
+                          "$ref": "#/components/schemas/PageData"
+                        }
+                      }
+                    }
+                  ]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/live/{id}": {
+      "get": {
+        "summary": "获取直播间详情",
+        "tags": ["直播"],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            },
+            "description": "直播间ID"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "成功",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/Response"
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "data": {
+                          "$ref": "#/components/schemas/LiveStream"
+                        }
+                      }
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          }
+        }
+      },
+      "delete": {
+        "summary": "删除直播间",
+        "tags": ["直播"],
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            },
+            "description": "直播间ID"
+          }
+        ],
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Success"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          }
+        }
+      }
+    },
+    "/api/v1/live/room/{room_id}": {
+      "get": {
+        "summary": "根据房间ID获取直播间",
+        "tags": ["直播"],
+        "parameters": [
+          {
+            "name": "room_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "房间ID"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "成功",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/Response"
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "data": {
+                          "$ref": "#/components/schemas/LiveStream"
+                        }
+                      }
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          }
+        }
+      }
+    },
+    "/api/v1/live/{id}/like": {
+      "post": {
+        "summary": "点赞直播",
+        "tags": ["直播"],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            },
+            "description": "直播间ID"
+          }
+        ],
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Success"
+          }
+        }
+      }
+    },
+    "/api/v1/live/ws": {
+      "get": {
+        "summary": "WebSocket 信令服务",
+        "tags": ["直播"],
+        "description": "用于 WebRTC 直播的信令通道",
+        "responses": {
+          "101": {
+            "description": "切换到 WebSocket 协议"
+          }
+        }
+      }
+    },
+    "/api/v1/live/create": {
+      "post": {
+        "summary": "创建直播间",
+        "tags": ["直播"],
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateLiveStreamRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "成功",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/Response"
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "data": {
+                          "$ref": "#/components/schemas/LiveStream"
+                        }
+                      }
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          }
+        }
+      }
+    },
+    "/api/v1/live/start": {
+      "post": {
+        "summary": "开始直播",
+        "tags": ["直播"],
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/StartLiveStreamRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Success"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          }
+        }
+      }
+    },
+    "/api/v1/live/end": {
+      "post": {
+        "summary": "结束直播",
+        "tags": ["直播"],
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/EndLiveStreamRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Success"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          }
+        }
+      }
+    },
+    "/api/v1/live/my": {
+      "get": {
+        "summary": "获取我的直播间",
+        "tags": ["直播"],
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "成功",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/Response"
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "data": {
+                          "$ref": "#/components/schemas/LiveStream"
+                        }
+                      }
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          }
+        }
+      }
+    },
+    "/api/v1/live/join/{room_id}": {
+      "post": {
+        "summary": "加入直播间",
+        "tags": ["直播"],
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "room_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "房间ID"
+          }
+        ],
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Success"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          }
+        }
+      }
+    },
+    "/api/v1/live/leave/{room_id}": {
+      "post": {
+        "summary": "离开直播间",
+        "tags": ["直播"],
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "room_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "房间ID"
+          }
+        ],
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Success"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          }
+        }
+      }
+    },
+    "/api/v1/search": {
+      "get": {
+        "summary": "综合搜索",
+        "tags": ["搜索"],
+        "parameters": [
+          {
+            "name": "keyword",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "搜索关键词"
+          },
+          {
+            "name": "type",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "enum": ["all", "video", "user", "hashtag"],
+              "default": "all"
+            },
+            "description": "搜索类型"
+          },
+          {
+            "$ref": "#/components/parameters/Page"
+          },
+          {
+            "$ref": "#/components/parameters/PageSize"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "成功",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Response"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/search/videos": {
+      "get": {
+        "summary": "搜索视频",
+        "tags": ["搜索"],
+        "parameters": [
+          {
+            "name": "keyword",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "搜索关键词"
+          },
+          {
+            "$ref": "#/components/parameters/Page"
+          },
+          {
+            "$ref": "#/components/parameters/PageSize"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "成功",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/Response"
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "data": {
+                          "$ref": "#/components/schemas/PageData"
+                        }
+                      }
+                    }
+                  ]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/search/users": {
+      "get": {
+        "summary": "搜索用户",
+        "tags": ["搜索"],
+        "parameters": [
+          {
+            "name": "keyword",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "搜索关键词"
+          },
+          {
+            "$ref": "#/components/parameters/Page"
+          },
+          {
+            "$ref": "#/components/parameters/PageSize"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "成功",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/Response"
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "data": {
+                          "$ref": "#/components/schemas/PageData"
+                        }
+                      }
+                    }
+                  ]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/search/hashtags": {
+      "get": {
+        "summary": "搜索话题",
+        "tags": ["搜索"],
+        "parameters": [
+          {
+            "name": "keyword",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "搜索关键词"
+          },
+          {
+            "$ref": "#/components/parameters/Page"
+          },
+          {
+            "$ref": "#/components/parameters/PageSize"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "成功",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Response"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/search/hot": {
+      "get": {
+        "summary": "热搜榜",
+        "tags": ["搜索"],
+        "responses": {
+          "200": {
+            "description": "成功",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Response"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/search/suggestions": {
+      "get": {
+        "summary": "搜索建议",
+        "tags": ["搜索"],
+        "parameters": [
+          {
+            "name": "keyword",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "搜索关键词"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "成功",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Response"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/search/history": {
+      "get": {
+        "summary": "搜索历史",
+        "tags": ["搜索"],
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "成功",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Response"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          }
+        }
+      },
+      "delete": {
+        "summary": "清空搜索历史",
+        "tags": ["搜索"],
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Success"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          }
+        }
+      }
+    },
+    "/api/v1/messages/conversations": {
+      "get": {
+        "summary": "获取会话列表",
+        "tags": ["消息"],
+        "security": [{"BearerAuth": []}],
+        "responses": {
+          "200": {
+            "description": "成功",
+            "content": {
+              "application/json": {
+                "schema": {"$ref": "#/components/schemas/Response"}
+              }
+            }
+          },
+          "401": {"$ref": "#/components/responses/Unauthorized"}
+        }
+      }
+    },
+    "/api/v1/messages/conversations/{user_id}": {
+      "get": {
+        "summary": "获取会话消息",
+        "tags": ["消息"],
+        "security": [{"BearerAuth": []}],
+        "parameters": [
+          {
+            "name": "user_id",
+            "in": "path",
+            "required": true,
+            "schema": {"type": "integer"},
+            "description": "对方用户ID"
+          },
+          {"$ref": "#/components/parameters/Page"},
+          {"$ref": "#/components/parameters/PageSize"}
+        ],
+        "responses": {
+          "200": {
+            "description": "成功",
+            "content": {
+              "application/json": {
+                "schema": {"$ref": "#/components/schemas/Response"}
+              }
+            }
+          },
+          "401": {"$ref": "#/components/responses/Unauthorized"}
+        }
+      }
+    },
+    "/api/v1/messages/conversations/{user_id}/read": {
+      "post": {
+        "summary": "标记会话已读",
+        "tags": ["消息"],
+        "security": [{"BearerAuth": []}],
+        "parameters": [
+          {
+            "name": "user_id",
+            "in": "path",
+            "required": true,
+            "schema": {"type": "integer"},
+            "description": "对方用户ID"
+          }
+        ],
+        "responses": {
+          "200": {"$ref": "#/components/responses/Success"},
+          "401": {"$ref": "#/components/responses/Unauthorized"}
+        }
+      }
+    },
+    "/api/v1/messages/send": {
+      "post": {
+        "summary": "发送消息",
+        "tags": ["消息"],
+        "security": [{"BearerAuth": []}],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["to_user_id", "content"],
+                "properties": {
+                  "to_user_id": {"type": "integer"},
+                  "content": {"type": "string"},
+                  "content_type": {"type": "integer"}
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {"$ref": "#/components/responses/Success"},
+          "401": {"$ref": "#/components/responses/Unauthorized"}
+        }
+      }
+    },
+    "/api/v1/messages/{id}/read": {
+      "post": {
+        "summary": "标记消息已读",
+        "tags": ["消息"],
+        "security": [{"BearerAuth": []}],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {"type": "integer"}
+          }
+        ],
+        "responses": {
+          "200": {"$ref": "#/components/responses/Success"},
+          "401": {"$ref": "#/components/responses/Unauthorized"}
+        }
+      }
+    },
+    "/api/v1/messages/{id}": {
+      "delete": {
+        "summary": "删除消息",
+        "tags": ["消息"],
+        "security": [{"BearerAuth": []}],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {"type": "integer"}
+          }
+        ],
+        "responses": {
+          "200": {"$ref": "#/components/responses/Success"},
+          "401": {"$ref": "#/components/responses/Unauthorized"}
+        }
+      }
+    },
+    "/api/v1/messages/unread/count": {
+      "get": {
+        "summary": "未读消息数",
+        "tags": ["消息"],
+        "security": [{"BearerAuth": []}],
+        "responses": {
+          "200": {
+            "description": "成功",
+            "content": {
+              "application/json": {
+                "schema": {"$ref": "#/components/schemas/Response"}
+              }
+            }
+          },
+          "401": {"$ref": "#/components/responses/Unauthorized"}
+        }
+      }
+    },
+    "/api/v1/notifications": {
+      "get": {
+        "summary": "通知列表",
+        "tags": ["通知"],
+        "security": [{"BearerAuth": []}],
+        "parameters": [
+          {"$ref": "#/components/parameters/Page"},
+          {"$ref": "#/components/parameters/PageSize"}
+        ],
+        "responses": {
+          "200": {
+            "description": "成功",
+            "content": {
+              "application/json": {
+                "schema": {"$ref": "#/components/schemas/Response"}
+              }
+            }
+          },
+          "401": {"$ref": "#/components/responses/Unauthorized"}
+        }
+      }
+    },
+    "/api/v1/notifications/{id}/read": {
+      "post": {
+        "summary": "标记通知已读",
+        "tags": ["通知"],
+        "security": [{"BearerAuth": []}],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {"type": "integer"}
+          }
+        ],
+        "responses": {
+          "200": {"$ref": "#/components/responses/Success"},
+          "401": {"$ref": "#/components/responses/Unauthorized"}
+        }
+      }
+    },
+    "/api/v1/notifications/read-all": {
+      "post": {
+        "summary": "标记所有通知已读",
+        "tags": ["通知"],
+        "security": [{"BearerAuth": []}],
+        "responses": {
+          "200": {"$ref": "#/components/responses/Success"},
+          "401": {"$ref": "#/components/responses/Unauthorized"}
+        }
+      }
+    },
+    "/api/v1/notifications/unread/count": {
+      "get": {
+        "summary": "未读通知数",
+        "tags": ["通知"],
+        "security": [{"BearerAuth": []}],
+        "responses": {
+          "200": {
+            "description": "成功",
+            "content": {
+              "application/json": {
+                "schema": {"$ref": "#/components/schemas/Response"}
+              }
+            }
+          },
+          "401": {"$ref": "#/components/responses/Unauthorized"}
+        }
+      }
+    },
+    "/api/v1/hashtags/hot": {
+      "get": {
+        "summary": "热门话题",
+        "tags": ["话题"],
+        "parameters": [
+          {"$ref": "#/components/parameters/Page"},
+          {"$ref": "#/components/parameters/PageSize"}
+        ],
+        "responses": {
+          "200": {
+            "description": "成功",
+            "content": {
+              "application/json": {
+                "schema": {"$ref": "#/components/schemas/Response"}
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/hashtags/{id}": {
+      "get": {
+        "summary": "话题详情",
+        "tags": ["话题"],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {"type": "integer"}
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "成功",
+            "content": {
+              "application/json": {
+                "schema": {"$ref": "#/components/schemas/Response"}
+              }
+            }
+          },
+          "404": {"$ref": "#/components/responses/NotFound"}
+        }
+      }
+    },
+    "/api/v1/hashtags/{id}/videos": {
+      "get": {
+        "summary": "话题视频列表",
+        "tags": ["话题"],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {"type": "integer"}
+          },
+          {"$ref": "#/components/parameters/Page"},
+          {"$ref": "#/components/parameters/PageSize"}
+        ],
+        "responses": {
+          "200": {
+            "description": "成功",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    {"$ref": "#/components/schemas/Response"},
+                    {
+                      "type": "object",
+                      "properties": {
+                        "data": {"$ref": "#/components/schemas/PageData"}
+                      }
+                    }
+                  ]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/hashtags": {
+      "post": {
+        "summary": "创建话题",
+        "tags": ["话题"],
+        "security": [{"BearerAuth": []}],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["name"],
+                "properties": {
+                  "name": {"type": "string"},
+                  "description": {"type": "string"},
+                  "cover": {"type": "string"}
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {"$ref": "#/components/responses/Success"},
+          "401": {"$ref": "#/components/responses/Unauthorized"}
+        }
+      }
+    }
+  },
+  "components": {
+    "securitySchemes": {
+      "BearerAuth": {
+        "type": "http",
+        "scheme": "bearer",
+        "bearerFormat": "JWT",
+        "description": "使用 JWT Token 进行身份验证，格式: Bearer {token}"
+      }
+    },
+    "parameters": {
+      "Page": {
+        "name": "page",
+        "in": "query",
+        "schema": {
+          "type": "integer",
+          "default": 1,
+          "minimum": 1
+        },
+        "description": "页码"
+      },
+      "PageSize": {
+        "name": "page_size",
+        "in": "query",
+        "schema": {
+          "type": "integer",
+          "default": 20,
+          "minimum": 1,
+          "maximum": 100
+        },
+        "description": "每页数量"
+      }
+    },
+    "schemas": {
+      "Response": {
+        "type": "object",
+        "properties": {
+          "code": {
+            "type": "integer",
+            "description": "业务状态码，0表示成功"
+          },
+          "message": {
+            "type": "string",
+            "description": "提示信息"
+          },
+          "data": {
+            "description": "响应数据"
+          }
+        }
+      },
+      "PageData": {
+        "type": "object",
+        "properties": {
+          "list": {
+            "type": "array",
+            "items": {},
+            "description": "数据列表"
+          },
+          "total": {
+            "type": "integer",
+            "format": "int64",
+            "description": "总数"
+          },
+          "page": {
+            "type": "integer",
+            "description": "当前页"
+          },
+          "page_size": {
+            "type": "integer",
+            "description": "每页数量"
+          }
+        }
+      },
+      "RegisterRequest": {
+        "type": "object",
+        "required": ["username", "password", "email"],
+        "properties": {
+          "username": {
+            "type": "string",
+            "minLength": 3,
+            "maxLength": 50,
+            "description": "用户名"
+          },
+          "password": {
+            "type": "string",
+            "minLength": 6,
+            "maxLength": 50,
+            "description": "密码"
+          },
+          "email": {
+            "type": "string",
+            "format": "email",
+            "description": "邮箱"
+          },
+          "phone": {
+            "type": "string",
+            "description": "手机号"
+          },
+          "nickname": {
+            "type": "string",
+            "description": "昵称"
+          }
+        }
+      },
+      "LoginRequest": {
+        "type": "object",
+        "required": ["username", "password"],
+        "properties": {
+          "username": {
+            "type": "string",
+            "description": "用户名"
+          },
+          "password": {
+            "type": "string",
+            "description": "密码"
+          }
+        }
+      },
+      "User": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "integer",
+            "format": "uint"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "username": {
+            "type": "string",
+            "description": "用户名"
+          },
+          "email": {
+            "type": "string",
+            "description": "邮箱"
+          },
+          "phone": {
+            "type": "string",
+            "description": "手机号"
+          },
+          "nickname": {
+            "type": "string",
+            "description": "昵称"
+          },
+          "avatar": {
+            "type": "string",
+            "description": "头像URL"
+          },
+          "gender": {
+            "type": "integer",
+            "enum": [0, 1, 2],
+            "description": "性别：0-未知，1-男，2-女"
+          },
+          "birthday": {
+            "type": "string",
+            "format": "date-time",
+            "description": "生日"
+          },
+          "signature": {
+            "type": "string",
+            "description": "个性签名"
+          },
+          "province": {
+            "type": "string",
+            "description": "省份"
+          },
+          "city": {
+            "type": "string",
+            "description": "城市"
+          },
+          "follow_count": {
+            "type": "integer",
+            "format": "int64",
+            "description": "关注数"
+          },
+          "follower_count": {
+            "type": "integer",
+            "format": "int64",
+            "description": "粉丝数"
+          },
+          "video_count": {
+            "type": "integer",
+            "format": "int64",
+            "description": "视频数"
+          },
+          "like_count": {
+            "type": "integer",
+            "format": "int64",
+            "description": "获赞数"
+          },
+          "favorite_count": {
+            "type": "integer",
+            "format": "int64",
+            "description": "收藏数"
+          },
+          "status": {
+            "type": "integer",
+            "enum": [0, 1],
+            "description": "状态：0-禁用，1-正常"
+          },
+          "is_verified": {
+            "type": "boolean",
+            "description": "是否认证"
+          },
+          "last_login_at": {
+            "type": "string",
+            "format": "date-time",
+            "description": "最后登录时间"
+          }
+        }
+      },
+      "CreateVideoRequest": {
+        "type": "object",
+        "required": ["title", "video_url", "cover_url", "duration"],
+        "properties": {
+          "title": {
+            "type": "string",
+            "maxLength": 200,
+            "description": "视频标题"
+          },
+          "description": {
+            "type": "string",
+            "maxLength": 1000,
+            "description": "视频描述"
+          },
+          "video_url": {
+            "type": "string",
+            "description": "视频URL"
+          },
+          "cover_url": {
+            "type": "string",
+            "description": "封面URL"
+          },
+          "duration": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "视频时长（秒）"
+          },
+          "width": {
+            "type": "integer",
+            "description": "视频宽度"
+          },
+          "height": {
+            "type": "integer",
+            "description": "视频高度"
+          },
+          "file_size": {
+            "type": "integer",
+            "format": "int64",
+            "description": "文件大小（字节）"
+          },
+          "category_id": {
+            "type": "integer",
+            "description": "分类ID"
+          },
+          "tags": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "标签列表"
+          }
+        }
+      },
+      "Video": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "integer",
+            "format": "uint"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "user_id": {
+            "type": "integer",
+            "format": "uint",
+            "description": "作者ID"
+          },
+          "title": {
+            "type": "string",
+            "description": "标题"
+          },
+          "description": {
+            "type": "string",
+            "description": "描述"
+          },
+          "cover_url": {
+            "type": "string",
+            "description": "封面URL"
+          },
+          "video_url": {
+            "type": "string",
+            "description": "视频URL"
+          },
+          "duration": {
+            "type": "integer",
+            "description": "视频时长（秒）"
+          },
+          "width": {
+            "type": "integer",
+            "description": "视频宽度"
+          },
+          "height": {
+            "type": "integer",
+            "description": "视频高度"
+          },
+          "file_size": {
+            "type": "integer",
+            "format": "int64",
+            "description": "文件大小（字节）"
+          },
+          "category_id": {
+            "type": "integer",
+            "description": "分类ID"
+          },
+          "tags": {
+            "type": "string",
+            "description": "标签（逗号分隔）"
+          },
+          "play_count": {
+            "type": "integer",
+            "format": "int64",
+            "description": "播放量"
+          },
+          "like_count": {
+            "type": "integer",
+            "format": "int64",
+            "description": "点赞数"
+          },
+          "comment_count": {
+            "type": "integer",
+            "format": "int64",
+            "description": "评论数"
+          },
+          "share_count": {
+            "type": "integer",
+            "format": "int64",
+            "description": "分享数"
+          },
+          "favorite_count": {
+            "type": "integer",
+            "format": "int64",
+            "description": "收藏数"
+          },
+          "hot_score": {
+            "type": "number",
+            "format": "double",
+            "description": "热度分数"
+          },
+          "quality_score": {
+            "type": "number",
+            "format": "double",
+            "description": "质量分数"
+          },
+          "status": {
+            "type": "integer",
+            "enum": [0, 1, 2, 3],
+            "description": "状态：0-审核中，1-已发布，2-不通过，3-下架"
+          },
+          "is_public": {
+            "type": "boolean",
+            "description": "是否公开"
+          },
+          "allow_comment": {
+            "type": "boolean",
+            "description": "是否允许评论"
+          },
+          "published_at": {
+            "type": "string",
+            "format": "date-time",
+            "description": "发布时间"
+          }
+        }
+      },
+      "CreateCommentRequest": {
+        "type": "object",
+        "required": ["video_id", "content"],
+        "properties": {
+          "video_id": {
+            "type": "integer",
+            "description": "视频ID"
+          },
+          "content": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 1000,
+            "description": "评论内容"
+          },
+          "parent_id": {
+            "type": "integer",
+            "description": "父评论ID（回复评论时使用）"
+          },
+          "reply_to_user_id": {
+            "type": "integer",
+            "description": "回复的用户ID"
+          }
+        }
+      },
+      "Comment": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "integer",
+            "format": "uint"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "video_id": {
+            "type": "integer",
+            "format": "uint",
+            "description": "视频ID"
+          },
+          "user_id": {
+            "type": "integer",
+            "format": "uint",
+            "description": "评论用户ID"
+          },
+          "content": {
+            "type": "string",
+            "description": "评论内容"
+          },
+          "parent_id": {
+            "type": "integer",
+            "format": "uint",
+            "description": "父评论ID"
+          },
+          "root_id": {
+            "type": "integer",
+            "format": "uint",
+            "description": "根评论ID"
+          },
+          "reply_to_user_id": {
+            "type": "integer",
+            "format": "uint",
+            "description": "回复的用户ID"
+          },
+          "like_count": {
+            "type": "integer",
+            "format": "int64",
+            "description": "点赞数"
+          },
+          "reply_count": {
+            "type": "integer",
+            "format": "int64",
+            "description": "回复数"
+          },
+          "status": {
+            "type": "integer",
+            "enum": [0, 1, 2, 3],
+            "description": "状态：0-已删除，1-正常，2-审核中，3-违规"
+          }
+        }
+      },
+      "CreateLiveStreamRequest": {
+        "type": "object",
+        "required": ["title"],
+        "properties": {
+          "title": {
+            "type": "string",
+            "description": "直播标题"
+          },
+          "description": {
+            "type": "string",
+            "description": "直播描述"
+          },
+          "cover": {
+            "type": "string",
+            "description": "封面图"
+          }
+        }
+      },
+      "StartLiveStreamRequest": {
+        "type": "object",
+        "required": ["stream_key"],
+        "properties": {
+          "stream_key": {
+            "type": "string",
+            "description": "推流密钥"
+          }
+        }
+      },
+      "EndLiveStreamRequest": {
+        "type": "object",
+        "required": ["stream_key"],
+        "properties": {
+          "stream_key": {
+            "type": "string",
+            "description": "推流密钥"
+          }
+        }
+      },
+      "LiveStream": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "integer",
+            "format": "uint"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "owner_id": {
+            "type": "integer",
+            "format": "uint",
+            "description": "主播用户ID"
+          },
+          "title": {
+            "type": "string",
+            "description": "直播标题"
+          },
+          "description": {
+            "type": "string",
+            "description": "直播描述"
+          },
+          "cover": {
+            "type": "string",
+            "description": "封面图"
+          },
+          "notice": {
+            "type": "string",
+            "description": "直播间公告"
+          },
+          "category_id": {
+            "type": "integer",
+            "format": "uint",
+            "description": "分类ID"
+          },
+          "tags": {
+            "type": "string",
+            "description": "标签（逗号分隔）"
+          },
+          "room_id": {
+            "type": "string",
+            "description": "房间ID"
+          },
+          "play_url": {
+            "type": "string",
+            "description": "HLS 播放地址"
+          },
+          "flv_url": {
+            "type": "string",
+            "description": "FLV 播放地址"
+          },
+          "record_url": {
+            "type": "string",
+            "description": "录制回放地址"
+          },
+          "quality": {
+            "type": "integer",
+            "enum": [1, 2, 3, 4],
+            "description": "清晰度：1-标清，2-高清，3-超清，4-蓝光"
+          },
+          "is_vertical": {
+            "type": "boolean",
+            "description": "是否竖屏直播"
+          },
+          "view_count": {
+            "type": "integer",
+            "format": "int64",
+            "description": "累计观看人数"
+          },
+          "like_count": {
+            "type": "integer",
+            "format": "int64",
+            "description": "点赞数"
+          },
+          "gift_count": {
+            "type": "integer",
+            "format": "int64",
+            "description": "礼物数量"
+          },
+          "gift_value": {
+            "type": "integer",
+            "format": "int64",
+            "description": "礼物总价值"
+          },
+          "comment_count": {
+            "type": "integer",
+            "format": "int64",
+            "description": "评论数"
+          },
+          "share_count": {
+            "type": "integer",
+            "format": "int64",
+            "description": "分享次数"
+          },
+          "online_count": {
+            "type": "integer",
+            "description": "当前在线人数"
+          },
+          "peak_count": {
+            "type": "integer",
+            "description": "峰值在线人数"
+          },
+          "status": {
+            "type": "string",
+            "enum": ["waiting", "live", "paused", "ended", "banned"],
+            "description": "状态"
+          },
+          "started_at": {
+            "type": "string",
+            "format": "date-time",
+            "description": "开播时间"
+          },
+          "ended_at": {
+            "type": "string",
+            "format": "date-time",
+            "description": "结束时间"
+          },
+          "duration": {
+            "type": "integer",
+            "format": "int64",
+            "description": "直播时长（秒）"
+          },
+          "allow_comment": {
+            "type": "boolean",
+            "description": "允许评论"
+          },
+          "allow_gift": {
+            "type": "boolean",
+            "description": "允许送礼"
+          },
+          "allow_share": {
+            "type": "boolean",
+            "description": "允许分享"
+          },
+          "is_private": {
+            "type": "boolean",
+            "description": "是否私密直播"
+          },
+          "has_products": {
+            "type": "boolean",
+            "description": "是否挂载商品"
+          },
+          "product_count": {
+            "type": "integer",
+            "description": "商品数量"
+          }
+        }
+      }
+    },
+    "responses": {
+      "Success": {
+        "description": "操作成功",
+        "content": {
+          "application/json": {
+            "schema": {
+              "type": "object",
+              "properties": {
+                "code": {
+                  "type": "integer",
+                  "example": 0
+                },
+                "message": {
+                  "type": "string",
+                  "example": "success"
+                },
+                "data": {
+                  "type": "object",
+                  "nullable": true
+                }
+              }
+            }
+          }
+        }
+      },
+      "InvalidParam": {
+        "description": "参数错误",
+        "content": {
+          "application/json": {
+            "schema": {
+              "type": "object",
+              "properties": {
+                "code": {
+                  "type": "integer",
+                  "example": 400
+                },
+                "message": {
+                  "type": "string",
+                  "example": "参数错误"
+                },
+                "data": {
+                  "type": "object",
+                  "nullable": true
+                }
+              }
+            }
+          }
+        }
+      },
+      "Unauthorized": {
+        "description": "未授权",
+        "content": {
+          "application/json": {
+            "schema": {
+              "type": "object",
+              "properties": {
+                "code": {
+                  "type": "integer",
+                  "example": 401
+                },
+                "message": {
+                  "type": "string",
+                  "example": "未登录"
+                },
+                "data": {
+                  "type": "object",
+                  "nullable": true
+                }
+              }
+            }
+          }
+        }
+      },
+      "NotFound": {
+        "description": "资源不存在",
+        "content": {
+          "application/json": {
+            "schema": {
+              "type": "object",
+              "properties": {
+                "code": {
+                  "type": "integer",
+                  "example": 404
+                },
+                "message": {
+                  "type": "string",
+                  "example": "资源不存在"
+                },
+                "data": {
+                  "type": "object",
+                  "nullable": true
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}

@@ -1,0 +1,729 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>MicroVibe - 观众观看 (SFU 信令中继模式)</title>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      min-height: 100vh;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      padding: 20px;
+    }
+
+    .container {
+      background: white;
+      border-radius: 20px;
+      box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+      max-width: 1200px;
+      width: 100%;
+      overflow: hidden;
+    }
+
+    .header {
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      color: white;
+      padding: 30px;
+      text-align: center;
+    }
+
+    .header h1 {
+      font-size: 28px;
+      margin-bottom: 10px;
+    }
+
+    .header p {
+      font-size: 14px;
+      opacity: 0.9;
+    }
+
+    .content {
+      padding: 30px;
+    }
+
+    .video-container {
+      position: relative;
+      background: #000;
+      border-radius: 10px;
+      overflow: hidden;
+      margin-bottom: 20px;
+    }
+
+    video {
+      width: 100%;
+      height: auto;
+      display: block;
+      min-height: 400px;
+    }
+
+    .video-overlay {
+      position: absolute;
+      top: 10px;
+      left: 10px;
+      right: 10px;
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+    }
+
+    .status-badge {
+      background: rgba(0, 0, 0, 0.7);
+      color: white;
+      padding: 8px 16px;
+      border-radius: 20px;
+      font-size: 12px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .status-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: #ef4444;
+      animation: pulse 2s infinite;
+    }
+
+    @keyframes pulse {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.5; }
+    }
+
+    .status-dot.connected {
+      background: #10b981;
+    }
+
+    .viewer-count {
+      background: rgba(0, 0, 0, 0.7);
+      color: white;
+      padding: 8px 16px;
+      border-radius: 20px;
+      font-size: 12px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .stats {
+      position: absolute;
+      bottom: 10px;
+      right: 10px;
+      background: rgba(0, 0, 0, 0.7);
+      color: white;
+      padding: 12px;
+      border-radius: 10px;
+      font-size: 11px;
+      line-height: 1.6;
+    }
+
+    .room-list {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
+      gap: 15px;
+      margin-bottom: 20px;
+    }
+
+    .room-card {
+      background: #f9fafb;
+      border: 2px solid #e5e7eb;
+      border-radius: 10px;
+      padding: 15px;
+      cursor: pointer;
+      transition: all 0.3s;
+    }
+
+    .room-card:hover {
+      border-color: #667eea;
+      transform: translateY(-2px);
+      box-shadow: 0 5px 15px rgba(102, 126, 234, 0.3);
+    }
+
+    .room-card.active {
+      border-color: #764ba2;
+      background: #f5f3ff;
+    }
+
+    .room-title {
+      font-weight: 600;
+      margin-bottom: 5px;
+      color: #1f2937;
+    }
+
+    .room-info {
+      font-size: 12px;
+      color: #6b7280;
+    }
+
+    .form-group {
+      margin-bottom: 20px;
+    }
+
+    .form-group label {
+      display: block;
+      margin-bottom: 8px;
+      font-weight: 600;
+      color: #374151;
+    }
+
+    .form-group input {
+      width: 100%;
+      padding: 12px;
+      border: 2px solid #e5e7eb;
+      border-radius: 8px;
+      font-size: 14px;
+      transition: border-color 0.3s;
+    }
+
+    .form-group input:focus {
+      outline: none;
+      border-color: #667eea;
+    }
+
+    .button-group {
+      display: flex;
+      gap: 10px;
+      margin-top: 20px;
+    }
+
+    button {
+      flex: 1;
+      padding: 14px 24px;
+      border: none;
+      border-radius: 8px;
+      font-size: 14px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.3s;
+    }
+
+    .btn-primary {
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      color: white;
+    }
+
+    .btn-primary:hover:not(:disabled) {
+      transform: translateY(-2px);
+      box-shadow: 0 10px 20px rgba(102, 126, 234, 0.3);
+    }
+
+    .btn-secondary {
+      background: #6b7280;
+      color: white;
+    }
+
+    .btn-danger {
+      background: #ef4444;
+      color: white;
+    }
+
+    button:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+    }
+
+    .log-container {
+      background: #f9fafb;
+      border: 2px solid #e5e7eb;
+      border-radius: 8px;
+      padding: 15px;
+      max-height: 150px;
+      overflow-y: auto;
+      font-family: 'Courier New', monospace;
+      font-size: 12px;
+      margin-top: 20px;
+    }
+
+    .log-entry {
+      padding: 4px 0;
+      border-bottom: 1px solid #e5e7eb;
+    }
+
+    .log-entry:last-child {
+      border-bottom: none;
+    }
+
+    .log-time {
+      color: #6b7280;
+      margin-right: 8px;
+    }
+
+    .log-info { color: #3b82f6; }
+    .log-success { color: #10b981; }
+    .log-error { color: #ef4444; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="header">
+      <h1>📺 观众观看控制台</h1>
+      <p>MicroVibe WebRTC SFU 直播系统 - gRPC 信令中继模式</p>
+    </div>
+
+    <div class="content">
+      <!-- 视频播放 -->
+      <div class="video-container">
+        <video id="remoteVideo" autoplay playsinline controls muted></video>
+        <div class="video-overlay">
+          <div class="status-badge" id="statusBadge">
+            <span class="status-dot" id="statusDot"></span>
+            <span id="statusText">未连接</span>
+          </div>
+          <div class="viewer-count">
+            👁️ <span id="viewerCount">0</span> 人观看
+          </div>
+        </div>
+        <div class="stats" id="stats" style="display: none;">
+          <div>视频码率: <span id="videoBitrate">0</span> kbps</div>
+          <div>音频码率: <span id="audioBitrate">0</span> kbps</div>
+          <div>丢包率: <span id="packetLoss">0</span>%</div>
+          <div>延迟: <span id="rtt">0</span> ms</div>
+        </div>
+      </div>
+
+      <!-- 直播间列表 -->
+      <div id="roomListSection">
+        <h3 style="margin-bottom: 15px; color: #374151;">🔴 正在直播</h3>
+        <div class="room-list" id="roomList">
+          <div style="grid-column: 1/-1; text-align: center; padding: 20px; color: #6b7280;">
+            正在加载直播列表...
+          </div>
+        </div>
+      </div>
+
+      <!-- 手动输入房间ID -->
+      <div class="form-group">
+        <label for="roomId">或手动输入房间 ID</label>
+        <input type="text" id="roomId" placeholder="输入房间 ID（例如：room-123）">
+      </div>
+
+      <!-- 按钮组 -->
+      <div class="button-group">
+        <button id="joinBtn" class="btn-primary" onclick="joinLive()">🎬 加入直播</button>
+        <button id="leaveBtn" class="btn-danger" onclick="leaveLive()" disabled>👋 离开直播</button>
+        <button class="btn-secondary" onclick="refreshRoomList()">🔄 刷新列表</button>
+      </div>
+
+      <!-- 日志 -->
+      <div class="log-container" id="logContainer">
+        <div class="log-entry">
+          <span class="log-time">[系统]</span>
+          <span class="log-info">准备就绪，选择直播间或输入房间 ID...</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    // 全局变量
+    let peerConnection = null;
+    let websocket = null;
+    let currentRoomId = null;
+    let statsInterval = null;
+    const apiUrl = 'http://localhost:8080/api/v1';
+
+    // 固定的观看者用户ID（生产环境中应从登录状态获取）
+    const viewerUserId = 2;
+    const viewerUsername = 'viewer';
+
+    // 日志函数
+    function log(message, type = 'info') {
+      const logContainer = document.getElementById('logContainer');
+      const time = new Date().toLocaleTimeString();
+      const entry = document.createElement('div');
+      entry.className = 'log-entry';
+      entry.innerHTML = `
+        <span class="log-time">[${time}]</span>
+        <span class="log-${type}">${message}</span>
+      `;
+      logContainer.appendChild(entry);
+      logContainer.scrollTop = logContainer.scrollHeight;
+      console.log(`[${type}] ${message}`);
+    }
+
+    // 更新状态
+    function updateStatus(text, connected = false) {
+      document.getElementById('statusText').textContent = text;
+      const statusDot = document.getElementById('statusDot');
+      if (connected) {
+        statusDot.classList.add('connected');
+      } else {
+        statusDot.classList.remove('connected');
+      }
+    }
+
+    // 更新统计信息
+    function updateStats(stats) {
+      document.getElementById('videoBitrate').textContent = Math.round(stats.videoBitrate / 1000);
+      document.getElementById('audioBitrate').textContent = Math.round(stats.audioBitrate / 1000);
+      document.getElementById('packetLoss').textContent = (stats.packetLoss * 100).toFixed(2);
+      document.getElementById('rtt').textContent = Math.round(stats.rtt * 1000);
+    }
+
+    // 加载直播列表
+    async function loadRoomList() {
+      try {
+        const response = await fetch(`${apiUrl}/live/list?status=live&page=1&page_size=20`);
+        const data = await response.json();
+
+        const roomList = document.getElementById('roomList');
+        if (data.data && data.data.list && data.data.list.length > 0) {
+          roomList.innerHTML = data.data.list.map(room => `
+            <div class="room-card" onclick="selectRoom('${room.room_id}')">
+              <div class="room-title">${room.title}</div>
+              <div class="room-info">
+                👁️ ${room.online_count} 观看 | ❤️ ${room.like_count} 点赞
+              </div>
+              <div class="room-info" style="margin-top: 5px;">
+                房间 ID: ${room.room_id}
+              </div>
+            </div>
+          `).join('');
+        } else {
+          roomList.innerHTML = '<div style="grid-column: 1/-1; text-align: center; padding: 20px; color: #6b7280;">暂无直播间</div>';
+        }
+
+        log(`加载了 ${data.data?.list?.length || 0} 个直播间`, 'success');
+      } catch (error) {
+        log(`加载直播列表失败: ${error.message}`, 'error');
+      }
+    }
+
+    // 选择房间
+    function selectRoom(roomId) {
+      document.getElementById('roomId').value = roomId;
+      document.querySelectorAll('.room-card').forEach(card => {
+        card.classList.remove('active');
+      });
+      event.currentTarget.classList.add('active');
+      log(`已选择房间: ${roomId}`, 'info');
+    }
+
+    // 刷新房间列表
+    function refreshRoomList() {
+      log('正在刷新直播列表...', 'info');
+      loadRoomList();
+    }
+
+    // 加入直播
+    async function joinLive() {
+      try {
+        const roomId = document.getElementById('roomId').value;
+        if (!roomId) {
+          log('❌ 请选择或输入房间 ID', 'error');
+          return;
+        }
+
+        log(`正在加入直播间: ${roomId}`, 'info');
+        document.getElementById('joinBtn').disabled = true;
+        currentRoomId = roomId;
+        updateStatus('正在连接...', false);
+
+        // 1. 连接 WebSocket 信令服务器
+        log('正在连接信令服务器...', 'info');
+        const wsUrl = apiUrl.replace('http', 'ws') + `/live/ws?room_id=${roomId}&user_id=${viewerUserId}&username=${viewerUsername}&role=subscriber`;
+        websocket = new WebSocket(wsUrl);
+
+        websocket.onopen = () => {
+          log('✅ WebSocket 连接成功', 'success');
+          setupPeerConnection();
+        };
+
+        websocket.onmessage = handleSignalingMessage;
+
+        websocket.onerror = (error) => {
+          log(`❌ WebSocket 错误`, 'error');
+          updateStatus('连接失败', false);
+        };
+
+        websocket.onclose = () => {
+          log('WebSocket 连接关闭', 'info');
+          updateStatus('连接已断开', false);
+        };
+
+        // 2. 调用加入直播间 API（更新在线人数）
+        try {
+          await fetch(`${apiUrl}/live/join/${roomId}`, {
+            method: 'POST',
+          });
+          log('✅ 已加入直播间（业务层）', 'success');
+        } catch (error) {
+          log(`加入直播间 API 失败: ${error.message}`, 'error');
+        }
+
+      } catch (error) {
+        log(`❌ 加入失败: ${error.message}`, 'error');
+        document.getElementById('joinBtn').disabled = false;
+        updateStatus('未连接', false);
+      }
+    }
+
+    // 设置 PeerConnection（作为订阅者）
+    async function setupPeerConnection() {
+      try {
+        log('正在创建 PeerConnection（订阅者模式）...', 'info');
+
+        // 创建 PeerConnection
+        // 本地测试不需要 STUN，SFU 使用 ICE Lite 模式
+        peerConnection = new RTCPeerConnection({
+          iceServers: []
+        });
+
+        // 添加 transceiver（作为接收端）
+        peerConnection.addTransceiver('audio', { direction: 'recvonly' });
+        peerConnection.addTransceiver('video', { direction: 'recvonly' });
+        log('已添加音视频 transceiver（仅接收）', 'info');
+
+        // 接收远程媒体流
+        peerConnection.ontrack = (event) => {
+          log(`✅ 收到 ${event.track.kind} 轨道`, 'success');
+          const remoteVideo = document.getElementById('remoteVideo');
+          if (event.streams && event.streams[0]) {
+            remoteVideo.srcObject = event.streams[0];
+            log('✅ 视频流已绑定到播放器', 'success');
+
+            // 主动触发播放（解决autoplay被阻止的问题）
+            remoteVideo.play().then(() => {
+              log('✅ 视频播放成功', 'success');
+            }).catch(err => {
+              log(`⚠️ 自动播放失败，请点击播放按钮: ${err.message}`, 'error');
+            });
+          }
+        };
+
+        // ICE Candidate 处理
+        peerConnection.onicecandidate = (event) => {
+          if (event.candidate && websocket && websocket.readyState === WebSocket.OPEN) {
+            websocket.send(JSON.stringify({
+              type: 'ice',
+              room_id: currentRoomId,
+              payload: event.candidate
+            }));
+            log('发送 ICE Candidate', 'info');
+          }
+        };
+
+        // 连接状态监听
+        peerConnection.onconnectionstatechange = () => {
+          const state = peerConnection.connectionState;
+          log(`连接状态: ${state}`, 'info');
+
+          if (state === 'connected') {
+            updateStatus('🟢 观看中', true);
+            document.getElementById('stats').style.display = 'block';
+            document.getElementById('leaveBtn').disabled = false;
+            startStatsCollection();
+            log('✅ WebRTC 连接已建立', 'success');
+          } else if (state === 'failed') {
+            updateStatus('连接失败', false);
+            log('❌ WebRTC 连接失败', 'error');
+          } else if (state === 'disconnected') {
+            updateStatus('连接断开', false);
+            log('⚠️ WebRTC 连接已断开', 'error');
+          }
+        };
+
+        // 创建 Offer（订阅者主动创建 Offer）
+        log('正在创建 SDP Offer...', 'info');
+        const offer = await peerConnection.createOffer();
+        await peerConnection.setLocalDescription(offer);
+        log('✅ 本地 Offer 已设置', 'success');
+
+        // 发送 Offer 到服务器（通过信令中继到 SFU）
+        websocket.send(JSON.stringify({
+          type: 'offer',
+          room_id: currentRoomId,
+          payload: offer.sdp  // 只发送 SDP 字符串
+        }));
+        log('✅ Offer 已发送到服务器', 'success');
+
+      } catch (error) {
+        log(`❌ PeerConnection 错误: ${error.message}`, 'error');
+        updateStatus('创建连接失败', false);
+      }
+    }
+
+    // 处理信令消息
+    async function handleSignalingMessage(event) {
+      try {
+        const message = JSON.parse(event.data);
+
+        switch (message.type) {
+          case 'answer':
+            // 收到 SFU 返回的 Answer
+            log('收到 SDP Answer', 'success');
+
+            // 提取 SDP（兼容字符串和对象格式）
+            let sdp;
+            if (typeof message.payload === 'string') {
+              sdp = message.payload;
+            } else if (message.payload && message.payload.sdp) {
+              sdp = message.payload.sdp;
+            } else {
+              throw new Error('无效的 Answer 格式');
+            }
+
+            const answer = new RTCSessionDescription({
+              type: 'answer',
+              sdp: sdp
+            });
+
+            await peerConnection.setRemoteDescription(answer);
+            log('✅ Answer 已设置为远程描述', 'success');
+            break;
+
+          case 'ice':
+            // 收到 ICE Candidate
+            if (message.payload && peerConnection) {
+              await peerConnection.addIceCandidate(new RTCIceCandidate(message.payload));
+              log('已添加 ICE Candidate', 'info');
+            }
+            break;
+
+          case 'user_joined':
+            log(`用户 ${message.username} 加入直播间`, 'info');
+            break;
+
+          case 'user_left':
+            log(`用户 ${message.username} 离开直播间`, 'info');
+            break;
+
+          case 'error':
+            const errorMsg = message.payload?.error || '未知错误';
+            log(`❌ 服务器错误: ${errorMsg}`, 'error');
+            updateStatus('服务器错误', false);
+            break;
+
+          default:
+            log(`收到消息: ${message.type}`, 'info');
+        }
+      } catch (error) {
+        log(`❌ 处理消息失败: ${error.message}`, 'error');
+      }
+    }
+
+    // 开始统计信息收集
+    function startStatsCollection() {
+      if (statsInterval) clearInterval(statsInterval);
+
+      statsInterval = setInterval(async () => {
+        if (!peerConnection) return;
+
+        try {
+          const stats = await peerConnection.getStats();
+          let videoBitrate = 0;
+          let audioBitrate = 0;
+          let packetLoss = 0;
+          let rtt = 0;
+
+          stats.forEach(report => {
+            if (report.type === 'inbound-rtp') {
+              if (report.kind === 'video' && report.bytesReceived) {
+                videoBitrate = (report.bytesReceived * 8) / (report.timestamp / 1000);
+              } else if (report.kind === 'audio' && report.bytesReceived) {
+                audioBitrate = (report.bytesReceived * 8) / (report.timestamp / 1000);
+              }
+            }
+            if (report.type === 'candidate-pair' && report.state === 'succeeded') {
+              rtt = report.currentRoundTripTime || 0;
+              if (report.packetsReceived > 0) {
+                packetLoss = (report.packetsLost || 0) / report.packetsReceived;
+              }
+            }
+          });
+
+          updateStats({ videoBitrate, audioBitrate, packetLoss, rtt });
+        } catch (error) {
+          console.error('统计信息收集失败:', error);
+        }
+      }, 2000);
+    }
+
+    // 离开直播
+    async function leaveLive() {
+      log('正在离开直播间...', 'info');
+
+      // 停止统计
+      if (statsInterval) {
+        clearInterval(statsInterval);
+        statsInterval = null;
+      }
+
+      // 关闭 PeerConnection
+      if (peerConnection) {
+        peerConnection.close();
+        peerConnection = null;
+        log('PeerConnection 已关闭', 'info');
+      }
+
+      // 关闭 WebSocket
+      if (websocket) {
+        if (websocket.readyState === WebSocket.OPEN) {
+          websocket.send(JSON.stringify({
+            type: 'leave',
+            room_id: currentRoomId
+          }));
+        }
+        websocket.close();
+        websocket = null;
+        log('WebSocket 已关闭', 'info');
+      }
+
+      // 停止视频
+      const remoteVideo = document.getElementById('remoteVideo');
+      remoteVideo.srcObject = null;
+
+      // 调用离开 API
+      if (currentRoomId) {
+        try {
+          await fetch(`${apiUrl}/live/leave/${currentRoomId}`, {
+            method: 'POST',
+          });
+          log('✅ 已离开直播间（业务层）', 'success');
+        } catch (error) {
+          log(`离开直播间 API 失败: ${error.message}`, 'error');
+        }
+      }
+
+      // 重置状态
+      updateStatus('未连接', false);
+      document.getElementById('stats').style.display = 'none';
+      document.getElementById('joinBtn').disabled = false;
+      document.getElementById('leaveBtn').disabled = true;
+      currentRoomId = null;
+
+      log('✅ 已退出观看', 'success');
+    }
+
+    // 页面加载时初始化
+    window.addEventListener('load', () => {
+      log('页面加载完成', 'info');
+      loadRoomList();
+
+      // 每10秒刷新一次列表（仅在未观看时）
+      setInterval(() => {
+        if (!currentRoomId) {
+          loadRoomList();
+        }
+      }, 10000);
+    });
+
+    // 页面关闭时清理
+    window.addEventListener('beforeunload', () => {
+      if (currentRoomId) {
+        leaveLive();
+      }
+    });
+  </script>
+</body>
+</html>

@@ -1,0 +1,115 @@
+services:
+  nginx:
+    image: nginx:alpine
+    container_name: microvibe-nginx
+    ports:
+      - "80:80"
+    volumes:
+      - ./configs/nginx.conf:/etc/nginx/nginx.conf:ro
+    depends_on:
+      - app
+    networks:
+      - microvibe-network
+    restart: unless-stopped
+
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: microvibe-app
+    ports:
+      - "8080:8080"
+    environment:
+      - SERVER_HOST=0.0.0.0
+      - SERVER_PORT=8080
+      - SERVER_MODE=debug
+      - DATABASE_HOST=postgres
+      - DATABASE_PORT=5432
+      - DATABASE_USER=postgres
+      - DATABASE_PASSWORD=postgres
+      - DATABASE_DBNAME=microvibe
+      - DATABASE_SSLMODE=disable
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - REDIS_PASSWORD=
+      - REDIS_DB=0
+      # WebRTC 和 SFU 配置
+      - WEBRTC_SFU_ADDRESS=http://ion-sfu:7000
+      - WEBRTC_SFU_MODE=standalone
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      ion-sfu:
+        condition: service_started
+    networks:
+      - microvibe-network
+    restart: unless-stopped
+
+  postgres:
+    image: postgres:16-alpine
+    container_name: microvibe-postgres
+    environment:
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=postgres
+      - POSTGRES_DB=microvibe
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - microvibe-network
+    restart: unless-stopped
+
+  redis:
+    image: redis:7-alpine
+    container_name: microvibe-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - microvibe-network
+    restart: unless-stopped
+
+  # Pion Ion SFU 媒体服务器
+  ion-sfu:
+    image: pionwebrtc/ion-sfu:latest-allrpc
+    container_name: microvibe-ion-sfu
+    ports:
+      - "5000-5100:5000-5100/udp"   # WebRTC UDP 端口范围
+      - "7000:7000"                 # gRPC API (映射到 7100 避免冲突)
+      - "7001:7001"                 # JSON-RPC over HTTP
+    volumes:
+      - ./configs/sfu.toml:/configs/sfu.toml
+    environment:
+      - gaddr=0.0.0.0:7000
+      - jaddr=0.0.0.0:7001
+    networks:
+      - microvibe-network
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:7000"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    restart: unless-stopped
+
+networks:
+  microvibe-network:
+    driver: bridge
+
+volumes:
+  postgres-data:
+  redis-data:

@@ -1,0 +1,105 @@
+#!/bin/bash
+# Git commit message validation hook
+# Format: [emoji] type: subject
+#
+#         - change 1
+#         - change 2
+
+# Colors for output
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+NC='\033[0m' # No Color
+
+commit_msg_file=$1
+commit_msg=$(cat "$commit_msg_file")
+
+# Skip validation for merge commits
+if [[ "$commit_msg" =~ ^Merge ]]; then
+    exit 0
+fi
+
+# Define valid types
+valid_types="feat|fix|docs|style|refactor|perf|test|build|ci|chore|revert"
+
+# Extract first line (subject)
+subject=$(echo "$commit_msg" | head -n 1)
+
+# List of valid emojis
+valid_emojis="✨|🐛|📝|💄|♻️|⚡|✅|📦|👷|🔧|⏪"
+
+# Check if message starts with valid emoji
+if ! echo "$subject" | grep -qE "^($valid_emojis) "; then
+    echo -e "${RED}❌ 错误: 提交信息必须以 emoji 开头${NC}"
+    echo ""
+    echo -e "${YELLOW}正确格式:${NC}"
+    echo "  ✨ feat: 添加用户认证功能"
+    echo ""
+    echo "  - 添加 JWT 认证中间件"
+    echo "  - 实现登录和注册接口"
+    echo ""
+    echo -e "${YELLOW}可用的 emoji 和类型:${NC}"
+    echo "  ✨ feat     - 新功能"
+    echo "  🐛 fix      - Bug 修复"
+    echo "  📝 docs     - 文档更新"
+    echo "  💄 style    - 代码格式"
+    echo "  ♻️ refactor - 重构"
+    echo "  ⚡ perf     - 性能优化"
+    echo "  ✅ test     - 测试"
+    echo "  📦 build    - 构建"
+    echo "  👷 ci       - CI/CD"
+    echo "  🔧 chore    - 其他"
+    echo "  ⏪ revert   - 回滚"
+    exit 1
+fi
+
+# Extract type and message after emoji
+rest=$(echo "$subject" | sed -E "s/^($valid_emojis) //")
+
+# Check if format is: type: message
+if [[ ! "$rest" =~ ^($valid_types):\ .+ ]]; then
+    echo -e "${RED}❌ 错误: 提交信息格式不正确${NC}"
+    echo ""
+    echo -e "你的提交信息: ${YELLOW}$subject${NC}"
+    echo ""
+    echo -e "${YELLOW}正确格式:${NC}"
+    echo "  emoji type: subject"
+    echo ""
+    echo -e "${YELLOW}示例:${NC}"
+    echo "  ✨ feat: 添加视频推荐算法"
+    echo "  🐛 fix: 修复评论点赞重复问题"
+    echo "  📝 docs: 更新 API 文档"
+    echo ""
+    echo -e "${YELLOW}有效的类型:${NC}"
+    echo "  feat, fix, docs, style, refactor, perf, test, build, ci, chore, revert"
+    exit 1
+fi
+
+# Extract the type
+type=$(echo "$rest" | cut -d':' -f1)
+
+# Check if subject is too long
+subject_length=${#rest}
+if [ $subject_length -gt 72 ]; then
+    echo -e "${YELLOW}⚠️  警告: 提交信息主题过长 ($subject_length 字符，建议 ≤ 72)${NC}"
+fi
+
+# Check if there's a body with changes list (optional)
+body=$(echo "$commit_msg" | tail -n +3)
+if [[ -n "$body" ]]; then
+    # Check if body contains bullet points
+    if [[ ! "$body" =~ ^[[:space:]]*- ]]; then
+        echo -e "${YELLOW}⚠️  提示: 建议使用 - 开头列出详细修改${NC}"
+        echo ""
+        echo -e "${YELLOW}示例:${NC}"
+        echo "  [✨] feat: 添加直播功能"
+        echo ""
+        echo "  - 实现直播推流接口"
+        echo "  - 添加直播间管理功能"
+        echo "  - 集成 WebRTC 支持"
+    fi
+fi
+
+# Success
+echo -e "${GREEN}✅ 提交信息格式正确${NC}"
+exit 0

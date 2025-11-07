@@ -1,0 +1,38 @@
+[sfu]
+ballast = 0
+withstats = false
+
+[router]
+maxbandwidth = 1500
+maxpackettrack = 500
+audiolevelthreshold = 40
+audiolevelinterval = 1000
+audiolevelfilter = 20
+
+[router.simulcast]
+bestqualityfirst = true
+enabletemporallayer = false
+
+[webrtc]
+portrange = [5000, 5100]
+sdpsemantics = "unified-plan"
+mdns = true
+
+[webrtc.candidates]
+nat1to1 = ["127.0.0.1"]
+icelite = true
+
+# 本地测试不需要 STUN 服务器
+[[webrtc.iceserver]]
+urls = ["stun:stun.l.google.com:19302"]
+
+[webrtc.timeouts]
+disconnected = 5
+failed = 25
+keepalive = 2
+
+[turn]
+enabled = false
+
+[log]
+v = 1

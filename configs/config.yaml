@@ -1,0 +1,114 @@
+server:
+  host: "0.0.0.0"
+  port: "8080"
+  mode: "debug"  # debug 或 release
+
+database:
+  host: "localhost"
+  port: "5432"
+  user: "postgres"
+  password: "postgres"
+  dbname: "microvibe"
+  sslmode: "disable"
+
+redis:
+  host: "localhost"
+  port: "6379"
+  password: ""
+  db: 0
+
+jwt:
+  secret: "microvibe-secret-key-change-in-production"
+  expire: 24  # Token过期时间（小时）
+
+upload:
+  max_size: 104857600  # 最大文件大小：100MB
+  allowed_types:
+    - "video/mp4"
+    - "video/avi"
+    - "image/jpeg"
+    - "image/png"
+  path: "./uploads"  # 上传文件保存路径
+
+# 流媒体服务器配置（RTMP/HLS/FLV）
+streaming:
+  # RTMP 推流服务器（用于 OBS 等推流工具）
+  rtmp_server: "rtmp://localhost:1935/live"  # RTMP 推流地址前缀
+  rtmp_app: "live"                           # RTMP 应用名
+
+  # 播放地址配置
+  hls_server: "http://localhost:8080/hls"    # HLS 播放地址前缀
+  flv_server: "http://localhost:8080/flv"    # FLV 播放地址前缀
+  rtmp_play_server: "rtmp://localhost:1935/live"  # RTMP 播放地址前缀
+
+  # 默认流配置
+  default_stream_type: "video_audio"         # 默认流类型：video_only, audio_only, video_audio
+  default_video_codec: "h264"                # 默认视频编解码器：h264, h265, vp8, vp9
+  default_audio_codec: "aac"                 # 默认音频编解码器：aac, opus, mp3
+  default_video_bitrate: 2500                # 默认视频码率 (kbps)
+  default_audio_bitrate: 128                 # 默认音频码率 (kbps)
+  default_frame_rate: 30                     # 默认帧率：15, 24, 30, 60
+  default_resolution: "720p"                 # 默认分辨率：360p, 480p, 720p, 1080p, 2k, 4k
+
+# SFU 服务器配置
+sfu:
+  enabled: true                              # 是否启用 SFU（如果禁用，使用 P2P 模式）
+  server_url: "127.0.0.1:7100"               # SFU gRPC 地址（通过端口映射访问 7000→7100）
+  mode: "standalone"                         # standalone: 独立模式 | cluster: 集群模式
+
+  # 集群模式配置
+  cluster_nodes:                             # 集群节点列表（格式：host:port）
+    - "127.0.0.1:7100"
+    # - "ion-sfu-2:7100"
+  load_balance_method: "roundrobin"          # random, roundrobin, leastconn
+
+# WebRTC 配置
+webrtc:
+  # ICE 服务器配置（用于 NAT 穿透）
+  ice_servers:
+    - urls:
+        - "stun:stun.l.google.com:19302"
+        - "stun:stun1.l.google.com:19302"
+    # TURN 服务器（可选，用于中继流量）
+    # - urls:
+    #     - "turn:turn.example.com:3478"
+    #   username: "username"
+    #   credential: "password"
+
+  # UDP 端口范围（用于 WebRTC 媒体传输）
+  port_min: 5000
+  port_max: 5100
+
+  # 编解码器配置
+  video_codecs:
+    - "VP8"   # 兼容性好，性能稳定
+    - "VP9"   # 更高压缩率，更好画质
+    - "H264"  # 硬件加速支持好
+  audio_codecs:
+    - "Opus"  # 高质量音频编解码器
+
+  # 质量配置
+  max_bandwidth: 3000      # 最大带宽 (kbps) - 3 Mbps
+  video_bitrate: 2000      # 默认视频比特率 (kbps) - 2 Mbps
+  audio_bitrate: 128       # 音频比特率 (kbps) - 128 kbps
+  enable_simulcast: true   # 启用联播（多码率流，适配不同网络）
+  enable_dynacast: true    # 启用动态广播（按需发送层）
+  enable_adaptive_rate: true  # 启用自适应码率（根据网络自动调整）
+
+  # QoS 质量控制
+  enable_nack: true        # 启用 NACK (丢包重传)
+  enable_pli: true         # 启用 PLI (关键帧请求)
+  pli_interval: "3s"       # PLI 请求间隔
+
+# OAuth2/OIDC 配置（Authentik SSO）
+oauth:
+  authentik:
+    enabled: true  # 启用 Authentik OAuth2/OIDC 认证
+    issuer_url: "http://localhost:9000/application/o/microvibe/"
+    client_id: "microvibe-backend"
+    client_secret: "a03fTUqhny1oPPrdDtaUdkzp9R7YyMWMcfaOmPQfU734n2hxMsRud1YgOuFvJOvFr8M95l3BXX9AHd1R3FoVNgYHlp2jlqpFirw7zShZN7bjDgxaWkDThhMWnjbeZORv"
+    redirect_url: "http://localhost:8888/api/v1/oauth/callback"
+    scopes:
+      - "openid"
+      - "email"
+      - "profile"
