@@ -35,14 +35,11 @@ func (h *CommentHandler) CreateComment(c *gin.Context) {
 		return
 	}
 
-	comment, err := h.commentService.CreateComment(c.Request.Context(), &req)
+	comment, err := h.commentService.CreateComment(c.Request.Context(), userID, &req)
 	if err != nil {
 		response.Error(c, response.CodeError, err.Error())
 		return
 	}
-
-	// 设置用户ID
-	comment.UserID = userID
 
 	response.Success(c, comment)
 }
@@ -92,17 +89,13 @@ func (h *CommentHandler) GetReplies(c *gin.Context) {
 		pageSize = 20
 	}
 
-	replies, err := h.commentService.GetReplies(c.Request.Context(), uint(commentID), page, pageSize)
+	replies, total, err := h.commentService.GetReplies(c.Request.Context(), uint(commentID), page, pageSize)
 	if err != nil {
 		response.Error(c, response.CodeError, err.Error())
 		return
 	}
 
-	response.Success(c, gin.H{
-		"replies": replies,
-		"page":    page,
-		"size":    pageSize,
-	})
+	response.PageSuccess(c, replies, total, page, pageSize)
 }
 
 // GetCommentDetail 获取评论详情
@@ -190,4 +183,80 @@ func (h *CommentHandler) UnlikeComment(c *gin.Context) {
 	}
 
 	response.SuccessWithMessage(c, "取消点赞成功", nil)
+}
+
+// TogglePinComment 切换评论置顶状态
+func (h *CommentHandler) TogglePinComment(c *gin.Context) {
+	userID, exists := middleware.GetUserID(c)
+	if !exists {
+		response.Unauthorized(c, "请先登录")
+		return
+	}
+
+	commentIDStr := c.Param("id")
+	commentID, err := strconv.ParseUint(commentIDStr, 10, 64)
+	if err != nil {
+		response.InvalidParam(c, "评论ID格式错误")
+		return
+	}
+
+	// 从 Body 获取置顶状态
+	var req struct {
+		IsPinned bool `json:"is_pinned"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		response.InvalidParam(c, "参数错误: "+err.Error())
+		return
+	}
+
+	if err := h.commentService.TogglePinComment(c.Request.Context(), userID, uint(commentID), req.IsPinned); err != nil {
+		response.Error(c, response.CodeError, err.Error())
+		return
+	}
+
+	msg := "置顶成功"
+	if !req.IsPinned {
+		msg = "取消置顶成功"
+	}
+	response.SuccessWithMessage(c, msg, nil)
+}
+
+// GetReceivedComments 获取创作者收到的所有评论
+func (h *CommentHandler) GetReceivedComments(c *gin.Context) {
+	userID, exists := middleware.GetUserID(c)
+	if !exists {
+		response.Unauthorized(c, "请先登录")
+		return
+	}
+
+	page, _ := strconv.Atoi(c.DefaultQuery("page", "1"))
+	pageSize, _ := strconv.Atoi(c.DefaultQuery("page_size", "20"))
+
+	comments, total, err := h.commentService.GetReceivedComments(c.Request.Context(), userID, page, pageSize)
+	if err != nil {
+		response.Error(c, response.CodeError, err.Error())
+		return
+	}
+
+	response.PageSuccess(c, comments, total, page, pageSize)
+}
+
+// GetSentComments 获取用户发出的评论
+func (h *CommentHandler) GetSentComments(c *gin.Context) {
+	userID, exists := middleware.GetUserID(c)
+	if !exists {
+		response.Unauthorized(c, "请先登录")
+		return
+	}
+
+	page, _ := strconv.Atoi(c.DefaultQuery("page", "1"))
+	pageSize, _ := strconv.Atoi(c.DefaultQuery("page_size", "20"))
+
+	comments, total, err := h.commentService.GetSentComments(c.Request.Context(), userID, page, pageSize)
+	if err != nil {
+		response.Error(c, response.CodeError, err.Error())
+		return
+	}
+
+	response.PageSuccess(c, comments, total, page, pageSize)
 }

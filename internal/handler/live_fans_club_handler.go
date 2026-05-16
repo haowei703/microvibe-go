@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"microvibe-go/internal/middleware"
 	"microvibe-go/internal/service"
 	"microvibe-go/pkg/response"
 	"strconv"
@@ -28,7 +29,7 @@ func NewLiveFansClubHandler(fansClubService service.LiveFansClubService) *LiveFa
 // @Router /api/v1/live/fans-club/join [post]
 func (h *LiveFansClubHandler) JoinFansClub(c *gin.Context) {
 	// 获取当前登录用户ID
-	userID, exists := c.Get("uid")
+	userID, exists := middleware.GetUserID(c)
 	if !exists {
 		response.Unauthorized(c, "未登录")
 		return
@@ -41,7 +42,7 @@ func (h *LiveFansClubHandler) JoinFansClub(c *gin.Context) {
 		return
 	}
 
-	member, err := h.fansClubService.JoinFansClub(c.Request.Context(), userID.(uint), uint(liveID))
+	member, err := h.fansClubService.JoinFansClub(c.Request.Context(), userID, uint(liveID))
 	if err != nil {
 		response.Error(c, response.CodeError, err.Error())
 		return
@@ -58,7 +59,7 @@ func (h *LiveFansClubHandler) JoinFansClub(c *gin.Context) {
 // @Router /api/v1/live/fans-club/quit [post]
 func (h *LiveFansClubHandler) QuitFansClub(c *gin.Context) {
 	// 获取当前登录用户ID
-	userID, exists := c.Get("uid")
+	userID, exists := middleware.GetUserID(c)
 	if !exists {
 		response.Unauthorized(c, "未登录")
 		return
@@ -71,7 +72,7 @@ func (h *LiveFansClubHandler) QuitFansClub(c *gin.Context) {
 		return
 	}
 
-	if err := h.fansClubService.QuitFansClub(c.Request.Context(), userID.(uint), uint(liveID)); err != nil {
+	if err := h.fansClubService.QuitFansClub(c.Request.Context(), userID, uint(liveID)); err != nil {
 		response.Error(c, response.CodeError, err.Error())
 		return
 	}
@@ -87,7 +88,7 @@ func (h *LiveFansClubHandler) QuitFansClub(c *gin.Context) {
 // @Router /api/v1/live/fans-club/member [get]
 func (h *LiveFansClubHandler) GetMemberInfo(c *gin.Context) {
 	// 获取当前登录用户ID
-	userID, exists := c.Get("uid")
+	userID, exists := middleware.GetUserID(c)
 	if !exists {
 		response.Unauthorized(c, "未登录")
 		return
@@ -100,7 +101,7 @@ func (h *LiveFansClubHandler) GetMemberInfo(c *gin.Context) {
 		return
 	}
 
-	member, err := h.fansClubService.GetMemberInfo(c.Request.Context(), userID.(uint), uint(liveID))
+	member, err := h.fansClubService.GetMemberInfo(c.Request.Context(), userID, uint(liveID))
 	if err != nil {
 		response.Error(c, response.CodeError, err.Error())
 		return

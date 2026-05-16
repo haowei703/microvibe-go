@@ -53,5 +53,11 @@ temp/
 *.sqlite
 *.sqlite3
 
+# Uploaded media files (user-generated content)
+cmd/server/uploads/
+
+# Temporary video files
+temp_videos/
+
 # Docker volumes data
 data/

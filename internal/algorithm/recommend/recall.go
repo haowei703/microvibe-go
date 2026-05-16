@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/redis/go-redis/v9"
+	"golang.org/x/sync/errgroup"
 	"gorm.io/gorm"
 )
 
@@ -33,57 +34,59 @@ type RecallRequest struct {
 
 // Recall 多路召回策略
 func (r *Recaller) Recall(ctx context.Context, req *RecallRequest) ([]*model.Video, error) {
-	var videos []*model.Video
-	videoMap := make(map[uint]*model.Video) // 用于去重
-
-	// 1. 协同过滤召回（基于相似用户喜欢的视频）
-	cfVideos, err := r.collaborativeFilteringRecall(ctx, req.UserID, req.Limit/4)
-	if err == nil {
-		for _, v := range cfVideos {
-			videoMap[v.ID] = v
-		}
-	}
-
-	// 2. 内容召回（基于用户兴趣标签）
-	contentVideos, err := r.contentBasedRecall(ctx, req.UserID, req.Limit/4)
-	if err == nil {
-		for _, v := range contentVideos {
-			videoMap[v.ID] = v
-		}
-	}
-
-	// 3. 热门召回
-	hotVideos, err := r.hotRecall(ctx, req.Limit/4)
-	if err == nil {
-		for _, v := range hotVideos {
-			videoMap[v.ID] = v
-		}
-	}
-
-	// 4. 关注召回（关注的人发布的视频）
+	// 如果是关注流或朋友流场景，采用纯净召回策略
 	if req.Scene == "follow" {
-		followVideos, err := r.followRecall(ctx, req.UserID, req.Limit/2)
-		if err == nil {
-			for _, v := range followVideos {
-				videoMap[v.ID] = v
-			}
-		}
+		return r.followRecall(ctx, req.UserID, req.Limit)
+	}
+	if req.Scene == "friends" {
+		return r.friendsRecall(ctx, req.UserID, req.Limit)
 	}
 
-	// 5. 新视频召回（保证新视频有曝光机会）
-	newVideos, err := r.newVideoRecall(ctx, req.Limit/4)
-	if err == nil {
-		for _, v := range newVideos {
+	// 其他场景并发执行 4 路召回
+	type recallResult struct {
+		videos []*model.Video
+	}
+	results := make([]recallResult, 4)
+
+	eg, egCtx := errgroup.WithContext(ctx)
+
+	eg.Go(func() error {
+		videos, _ := r.collaborativeFilteringRecall(egCtx, req.UserID, req.Limit/4)
+		results[0] = recallResult{videos: videos}
+		return nil
+	})
+	eg.Go(func() error {
+		videos, _ := r.contentBasedRecall(egCtx, req.UserID, req.Limit/4)
+		results[1] = recallResult{videos: videos}
+		return nil
+	})
+	eg.Go(func() error {
+		videos, _ := r.hotRecall(egCtx, req.Limit/4)
+		results[2] = recallResult{videos: videos}
+		return nil
+	})
+	eg.Go(func() error {
+		videos, _ := r.newVideoRecall(egCtx, req.Limit/4)
+		results[3] = recallResult{videos: videos}
+		return nil
+	})
+
+	_ = eg.Wait()
+
+	// 合并去重
+	videoMap := make(map[uint]*model.Video)
+	for _, res := range results {
+		for _, v := range res.videos {
 			videoMap[v.ID] = v
 		}
 	}
 
-	// 转换为列表
+	videos := make([]*model.Video, 0, len(videoMap))
 	for _, v := range videoMap {
 		videos = append(videos, v)
 	}
 
-	// 如果召回数量不足，补充随机视频
+	// 召回不足时兜底随机补充
 	if len(videos) < req.Limit {
 		randomVideos, err := r.randomRecall(ctx, req.Limit-len(videos))
 		if err == nil {
@@ -100,18 +103,18 @@ func (r *Recaller) Recall(ctx context.Context, req *RecallRequest) ([]*model.Vid
 
 // collaborativeFilteringRecall 协同过滤召回
 func (r *Recaller) collaborativeFilteringRecall(ctx context.Context, userID uint, limit int) ([]*model.Video, error) {
-	// 简化实现：找到和当前用户行为相似的用户，推荐他们喜欢的视频
-	// 1. 获取当前用户最近喜欢的视频
+	// 获取当前用户最近喜欢的视频
 	var userLikes []model.Like
-	if err := r.db.Where("user_id = ?", userID).
+	if err := r.db.WithContext(ctx).Where("user_id = ?", userID).
 		Order("created_at DESC").
 		Limit(20).
 		Find(&userLikes).Error; err != nil {
 		return nil, err
 	}
 
+	// 新用户冷启动：无点赞记录时降级为热门召回
 	if len(userLikes) == 0 {
-		return []*model.Video{}, nil
+		return r.hotRecall(ctx, limit)
 	}
 
 	// 提取视频ID
@@ -120,9 +123,9 @@ func (r *Recaller) collaborativeFilteringRecall(ctx context.Context, userID uint
 		videoIDs = append(videoIDs, like.VideoID)
 	}
 
-	// 2. 找到也喜欢这些视频的其他用户
+	// 找到也喜欢这些视频的其他用户
 	var similarUsers []uint
-	if err := r.db.Model(&model.Like{}).
+	if err := r.db.WithContext(ctx).Model(&model.Like{}).
 		Select("DISTINCT user_id").
 		Where("video_id IN ? AND user_id != ?", videoIDs, userID).
 		Limit(50).
@@ -131,16 +134,16 @@ func (r *Recaller) collaborativeFilteringRecall(ctx context.Context, userID uint
 	}
 
 	if len(similarUsers) == 0 {
-		return []*model.Video{}, nil
+		return r.hotRecall(ctx, limit)
 	}
 
-	// 3. 获取这些相似用户喜欢的视频（排除当前用户已经看过的）
+	// 获取这些相似用户喜欢的视频（排除当前用户已经看过的）
 	var videos []*model.Video
-	if err := r.db.Table("videos").
+	if err := r.db.WithContext(ctx).Preload("User").
 		Joins("INNER JOIN likes ON videos.id = likes.video_id").
 		Where("likes.user_id IN ?", similarUsers).
 		Where("videos.id NOT IN ?", videoIDs).
-		Where("videos.status = ?", 1). // 已发布
+		Where("videos.status = ?", 1).
 		Group("videos.id").
 		Order("COUNT(likes.id) DESC").
 		Limit(limit).
@@ -155,7 +158,7 @@ func (r *Recaller) collaborativeFilteringRecall(ctx context.Context, userID uint
 func (r *Recaller) contentBasedRecall(ctx context.Context, userID uint, limit int) ([]*model.Video, error) {
 	// 1. 获取用户兴趣标签
 	var interests []model.UserInterest
-	if err := r.db.Where("user_id = ?", userID).
+	if err := r.db.WithContext(ctx).Where("user_id = ?", userID).
 		Order("score DESC").
 		Limit(5).
 		Find(&interests).Error; err != nil {
@@ -173,7 +176,8 @@ func (r *Recaller) contentBasedRecall(ctx context.Context, userID uint, limit in
 	}
 
 	var videos []*model.Video
-	if err := r.db.Where("category_id IN ?", categoryIDs).
+	if err := r.db.WithContext(ctx).Where("category_id IN ?", categoryIDs).
+		Preload("User").
 		Where("status = ?", 1).
 		Order("hot_score DESC").
 		Limit(limit).
@@ -187,10 +191,9 @@ func (r *Recaller) contentBasedRecall(ctx context.Context, userID uint, limit in
 // hotRecall 热门召回
 func (r *Recaller) hotRecall(ctx context.Context, limit int) ([]*model.Video, error) {
 	// 从 Redis 获取热门视频ID列表
-	cacheKey := "hot:videos:24h"
+	cacheKey := "hot:videos:7d"
 	videoIDs, err := r.redis.ZRevRange(ctx, cacheKey, 0, int64(limit-1)).Result()
 	if err == nil && len(videoIDs) > 0 {
-		// 从缓存获取成功
 		var ids []uint
 		for _, idStr := range videoIDs {
 			var id uint
@@ -199,15 +202,16 @@ func (r *Recaller) hotRecall(ctx context.Context, limit int) ([]*model.Video, er
 		}
 
 		var videos []*model.Video
-		if err := r.db.Where("id IN ?", ids).Find(&videos).Error; err == nil {
+		if err := r.db.WithContext(ctx).Preload("User").Where("id IN ?", ids).Find(&videos).Error; err == nil {
 			return videos, nil
 		}
 	}
 
-	// 缓存未命中，从数据库查询
+	// 缓存未命中，从数据库查询（扩大到7天窗口，保证内容充足）
 	var videos []*model.Video
-	yesterday := time.Now().Add(-24 * time.Hour)
-	if err := r.db.Where("status = ? AND published_at > ?", 1, yesterday).
+	sevenDaysAgo := time.Now().Add(-7 * 24 * time.Hour)
+	if err := r.db.WithContext(ctx).Where("status = ? AND published_at > ?", 1, sevenDaysAgo).
+		Preload("User").
 		Order("hot_score DESC").
 		Limit(limit).
 		Find(&videos).Error; err != nil {
@@ -230,12 +234,11 @@ func (r *Recaller) hotRecall(ctx context.Context, limit int) ([]*model.Video, er
 	return videos, nil
 }
 
-// followRecall 关注召回
+// followRecall 关注召回：获取关注用户的所有视频，按发布时间降序，不做已阅去重
 func (r *Recaller) followRecall(ctx context.Context, userID uint, limit int) ([]*model.Video, error) {
-	// 获取用户关注的人
 	var follows []model.Follow
-	if err := r.db.Where("user_id = ?", userID).
-		Limit(100).
+	if err := r.db.WithContext(ctx).Where("user_id = ?", userID).
+		Limit(500).
 		Find(&follows).Error; err != nil {
 		return nil, err
 	}
@@ -249,9 +252,9 @@ func (r *Recaller) followRecall(ctx context.Context, userID uint, limit int) ([]
 		followedIDs = append(followedIDs, follow.FollowedID)
 	}
 
-	// 获取关注的人发布的视频
 	var videos []*model.Video
-	if err := r.db.Where("user_id IN ?", followedIDs).
+	if err := r.db.WithContext(ctx).Where("user_id IN ?", followedIDs).
+		Preload("User").
 		Where("status = ?", 1).
 		Order("published_at DESC").
 		Limit(limit).
@@ -265,8 +268,10 @@ func (r *Recaller) followRecall(ctx context.Context, userID uint, limit int) ([]
 // newVideoRecall 新视频召回（冷启动）
 func (r *Recaller) newVideoRecall(ctx context.Context, limit int) ([]*model.Video, error) {
 	var videos []*model.Video
-	oneHourAgo := time.Now().Add(-1 * time.Hour)
-	if err := r.db.Where("status = ? AND published_at > ?", 1, oneHourAgo).
+	// 扩大到72小时，保证新视频有足够曝光窗口
+	threeDaysAgo := time.Now().Add(-72 * time.Hour)
+	if err := r.db.WithContext(ctx).Where("status = ? AND published_at > ?", 1, threeDaysAgo).
+		Preload("User").
 		Order("published_at DESC").
 		Limit(limit).
 		Find(&videos).Error; err != nil {
@@ -279,8 +284,41 @@ func (r *Recaller) newVideoRecall(ctx context.Context, limit int) ([]*model.Vide
 // randomRecall 随机召回（兜底策略）
 func (r *Recaller) randomRecall(ctx context.Context, limit int) ([]*model.Video, error) {
 	var videos []*model.Video
-	if err := r.db.Where("status = ?", 1).
-		Order("RANDOM()").
+	// 优先挑选热门视频中的一部分进行随机，保证兜底质量
+	if err := r.db.WithContext(ctx).Where("status = ?", 1).
+		Preload("User").
+		Order("hot_score DESC, RANDOM()").
+		Limit(limit).
+		Find(&videos).Error; err != nil {
+		return nil, err
+	}
+
+	return videos, nil
+}
+
+// friendsRecall 朋友召回 (双向关注)
+func (r *Recaller) friendsRecall(ctx context.Context, userID uint, limit int) ([]*model.Video, error) {
+	// 获取互相关注的人 (朋友)
+	var friendIDs []uint
+	if err := r.db.WithContext(ctx).Table("follows f1").
+		Select("f1.followed_id").
+		Joins("INNER JOIN follows f2 ON f1.user_id = f2.followed_id AND f1.followed_id = f2.user_id").
+		Where("f1.user_id = ?", userID).
+		Limit(200).
+		Pluck("f1.followed_id", &friendIDs).Error; err != nil {
+		return nil, err
+	}
+
+	if len(friendIDs) == 0 {
+		return []*model.Video{}, nil
+	}
+
+	// 获取朋友发布的视频
+	var videos []*model.Video
+	if err := r.db.WithContext(ctx).Where("user_id IN ?", friendIDs).
+		Preload("User").
+		Where("status = ?", 1).
+		Order("published_at DESC").
 		Limit(limit).
 		Find(&videos).Error; err != nil {
 		return nil, err

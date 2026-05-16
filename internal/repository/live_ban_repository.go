@@ -65,7 +65,7 @@ func (r *liveBanRepositoryImpl) Update(ctx context.Context, ban *model.LiveBan) 
 
 // FindByID 根据ID查询
 func (r *liveBanRepositoryImpl) FindByID(ctx context.Context, id uint) (*model.LiveBan, error) {
-	return cache.WithCache[*model.LiveBan](
+	return cache.WithCache(
 		cache.CacheConfig{
 			CacheName: "liveban",
 			KeyPrefix: "live:ban:id",
@@ -88,7 +88,7 @@ func (r *liveBanRepositoryImpl) FindByID(ctx context.Context, id uint) (*model.L
 func (r *liveBanRepositoryImpl) FindActiveBan(ctx context.Context, liveID, userID uint) (*model.LiveBan, error) {
 	cacheKey := fmt.Sprintf("%d:%d", liveID, userID)
 
-	return cache.WithCache[*model.LiveBan](
+	return cache.WithCache(
 		cache.CacheConfig{
 			CacheName: "liveban",
 			KeyPrefix: "live:ban:lu",

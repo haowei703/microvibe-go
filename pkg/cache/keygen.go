@@ -32,11 +32,12 @@ func DefaultKeyGenerator() KeyGenerator {
 		}
 
 		// 简单拼接：prefix:arg1:arg2:...
-		key := prefix
+		var key strings.Builder
+		key.WriteString(prefix)
 		for _, arg := range args {
-			key += fmt.Sprintf(":%v", arg)
+			fmt.Fprintf(&key, ":%v", arg)
 		}
-		return key
+		return key.String()
 	}
 }
 

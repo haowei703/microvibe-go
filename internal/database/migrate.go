@@ -33,6 +33,10 @@ func AutoMigrate(db *gorm.DB) error {
 		&model.FavoriteFolder{},
 		&model.Follow{},
 		&model.Share{},
+		&model.UserVisitor{},
+		&model.CommentMention{},
+		&model.Blacklist{},
+		&model.Report{},
 
 		// 消息相关
 		&model.Message{},
@@ -56,6 +60,7 @@ func AutoMigrate(db *gorm.DB) error {
 		&model.UserBehavior{},
 		&model.SearchHistory{},
 		&model.HotSearch{},
+		&model.VideoHistory{},
 	)
 
 	if err != nil {
@@ -87,6 +92,12 @@ func createIndexes(db *gorm.DB) {
 	// follows 表的组合唯一索引
 	db.Exec("CREATE UNIQUE INDEX IF NOT EXISTS idx_user_followed ON follows(user_id, followed_id)")
 
+	// blacklists 表的组合唯一索引
+	db.Exec("CREATE UNIQUE INDEX IF NOT EXISTS idx_user_blocked ON blacklists(user_id, blocked_user_id)")
+
+	// comment_mentions 表的组合唯一索引
+	db.Exec("CREATE UNIQUE INDEX IF NOT EXISTS idx_comment_mention ON comment_mentions(comment_id, user_id)")
+
 	// video_hashtags 表的组合唯一索引
 	db.Exec("CREATE UNIQUE INDEX IF NOT EXISTS idx_video_hashtag ON video_hashtags(video_id, hashtag_id)")
 
@@ -97,6 +108,8 @@ func createIndexes(db *gorm.DB) {
 	// user_behaviors 表的性能索引
 	db.Exec("CREATE INDEX IF NOT EXISTS idx_user_action_time ON user_behaviors(user_id, action, created_at)")
 	db.Exec("CREATE INDEX IF NOT EXISTS idx_video_action_time ON user_behaviors(video_id, action, created_at)")
+	db.Exec("CREATE INDEX IF NOT EXISTS idx_user_history_list ON video_histories(user_id, finished, updated_at DESC)")
+	db.Exec("CREATE UNIQUE INDEX IF NOT EXISTS idx_owner_visitor ON user_visitors(owner_id, visitor_id)")
 
 	// ========== 直播相关索引 ==========
 	// live_streams 表的流媒体索引（用于 OBS 推流支持）

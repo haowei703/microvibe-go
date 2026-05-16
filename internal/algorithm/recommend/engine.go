@@ -48,7 +48,7 @@ type RecommendResponse struct {
 }
 
 // Recommend 获取推荐视频
-// 核心推荐流程：召回 -> 特征工程 -> 排序 -> 过滤
+// 核心推荐流程：召回 -> 特征工程 -> 排序 -> 过滤（场景感知）
 func (e *Engine) Recommend(ctx context.Context, req *RecommendRequest) (*RecommendResponse, error) {
 	// 1. 召回阶段：从海量视频中快速召回候选集
 	candidates, err := e.recaller.Recall(ctx, &RecallRequest{
@@ -76,18 +76,20 @@ func (e *Engine) Recommend(ctx context.Context, req *RecommendRequest) (*Recomme
 		return nil, err
 	}
 
-	// 4. 过滤阶段：过滤掉不合适的视频
+	// 4. 过滤阶段：场景感知过滤（关注/朋友流跳过去重和多样性裁剪）
 	filteredVideos, err := e.videoFilter.Filter(ctx, &filter.FilterRequest{
 		UserID: req.UserID,
 		Videos: rankedVideos,
+		Scene:  req.Scene,
 	})
 	if err != nil {
 		return nil, err
 	}
 
-	// 5. 分页
+	// 5. 分页处理
 	start := (req.Page - 1) * req.PageSize
 	end := start + req.PageSize
+
 	if start >= len(filteredVideos) {
 		return &RecommendResponse{
 			Videos: []*model.Video{},
@@ -112,4 +114,9 @@ func (e *Engine) UpdateUserProfile(ctx context.Context, userID uint, behavior *m
 // UpdateVideoFeature 更新视频特征
 func (e *Engine) UpdateVideoFeature(ctx context.Context, videoID uint) error {
 	return e.featureEng.UpdateVideoFeature(ctx, videoID)
+}
+
+// RecordWatched 记录已观看视频（供播放历史服务调用，实时更新去重集合）
+func (e *Engine) RecordWatched(ctx context.Context, userID, videoID uint) {
+	e.videoFilter.RecordWatched(ctx, userID, videoID)
 }

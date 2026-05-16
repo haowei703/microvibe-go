@@ -483,7 +483,7 @@ func TestLoggingDecorator(t *testing.T) {
 	defer teardownCache(t, baseCache)
 
 	// 包装日志装饰器
-	loggedCache := cache.NewLoggingDecorator[*testUser](baseCache)
+	loggedCache := cache.NewLoggingDecorator(baseCache)
 
 	ctx := context.Background()
 	user := &testUser{ID: 1, Username: "alice", Email: "alice@example.com", Age: 25}

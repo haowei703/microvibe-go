@@ -2,6 +2,7 @@ package handler
 
 import (
 	"microvibe-go/internal/middleware"
+	"microvibe-go/internal/model"
 	"microvibe-go/internal/service"
 	"microvibe-go/pkg/response"
 	"strconv"
@@ -43,10 +44,11 @@ func (h *MessageHandler) SendMessage(c *gin.Context) {
 		return
 	}
 
-	response.Success(c, message)
+	response.Success(c, toMessageVO(message, userID))
 }
 
 // GetConversationMessages 获取会话消息
+// GetConversationMessages 根据会话ID获取消息
 func (h *MessageHandler) GetConversationMessages(c *gin.Context) {
 	userID, exists := middleware.GetUserID(c)
 	if !exists {
@@ -54,24 +56,29 @@ func (h *MessageHandler) GetConversationMessages(c *gin.Context) {
 		return
 	}
 
-	targetUserIDStr := c.Param("user_id")
-	targetUserID, err := strconv.ParseUint(targetUserIDStr, 10, 64)
+	conversationIDStr := c.Param("id")
+	conversationID, err := strconv.ParseUint(conversationIDStr, 10, 64)
 	if err != nil {
-		response.InvalidParam(c, "用户ID格式错误")
+		response.InvalidParam(c, "会话ID格式错误")
 		return
 	}
 
 	page, _ := strconv.Atoi(c.DefaultQuery("page", "1"))
 	pageSize, _ := strconv.Atoi(c.DefaultQuery("page_size", "20"))
 
-	messages, total, err := h.messageService.GetConversationMessages(
-		c.Request.Context(), userID, uint(targetUserID), page, pageSize)
+	messages, total, err := h.messageService.GetConversationMessagesByID(
+		c.Request.Context(), userID, uint(conversationID), page, pageSize)
 	if err != nil {
 		response.Error(c, response.CodeError, err.Error())
 		return
 	}
 
-	response.PageSuccess(c, messages, total, page, pageSize)
+	vos := make([]*model.MessageVO, len(messages))
+	for i, msg := range messages {
+		vos[i] = toMessageVO(msg, userID)
+	}
+
+	response.PageSuccess(c, vos, total, page, pageSize)
 }
 
 // MarkAsRead 标记消息为已读
@@ -105,19 +112,44 @@ func (h *MessageHandler) MarkConversationAsRead(c *gin.Context) {
 		return
 	}
 
-	targetUserIDStr := c.Param("user_id")
-	targetUserID, err := strconv.ParseUint(targetUserIDStr, 10, 64)
+	conversationIDStr := c.Param("id")
+	conversationID, err := strconv.ParseUint(conversationIDStr, 10, 64)
 	if err != nil {
-		response.InvalidParam(c, "用户ID格式错误")
+		response.InvalidParam(c, "会话ID格式错误")
 		return
 	}
 
-	if err := h.messageService.MarkConversationAsRead(c.Request.Context(), userID, uint(targetUserID)); err != nil {
+	if err := h.messageService.MarkConversationAsReadByID(c.Request.Context(), userID, uint(conversationID)); err != nil {
 		response.Error(c, response.CodeError, err.Error())
 		return
 	}
 
 	response.SuccessWithMessage(c, "标记成功", nil)
+}
+
+// CreateConversation 创建或获取会话
+func (h *MessageHandler) CreateConversation(c *gin.Context) {
+	userID, exists := middleware.GetUserID(c)
+	if !exists {
+		response.Unauthorized(c, "请先登录")
+		return
+	}
+
+	var req struct {
+		TargetUserID uint `json:"target_user_id" binding:"required"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		response.InvalidParam(c, "参数错误: "+err.Error())
+		return
+	}
+
+	conversation, err := h.messageService.GetOrCreateConversation(c.Request.Context(), userID, req.TargetUserID)
+	if err != nil {
+		response.Error(c, response.CodeError, err.Error())
+		return
+	}
+
+	response.Success(c, toConversationVO(conversation, userID))
 }
 
 // GetConversationList 获取会话列表
@@ -137,7 +169,12 @@ func (h *MessageHandler) GetConversationList(c *gin.Context) {
 		return
 	}
 
-	response.PageSuccess(c, conversations, total, page, pageSize)
+	vos := make([]model.ConversationVO, 0, len(conversations))
+	for _, conv := range conversations {
+		vos = append(vos, toConversationVO(conv, userID))
+	}
+
+	response.PageSuccess(c, vos, total, page, pageSize)
 }
 
 // GetUnreadMessageCount 获取未读消息数
@@ -258,4 +295,57 @@ func (h *MessageHandler) GetUnreadNotificationCount(c *gin.Context) {
 	response.Success(c, gin.H{
 		"count": count,
 	})
+}
+
+// toConversationVO 将模型转换为VO
+func toConversationVO(c *model.Conversation, currentUserID uint) model.ConversationVO {
+	vo := model.ConversationVO{
+		ID:          c.ID,
+		LastMessage: toMessageVO(c.LastMessage, currentUserID),
+		CreatedAt:   c.CreatedAt,
+		UpdatedAt:   c.UpdatedAt,
+	}
+
+	// 识别对方信息
+	if c.User1ID == currentUserID {
+		vo.UserID = c.User2ID
+		if c.User2 != nil {
+			vo.Nickname = c.User2.Nickname
+			vo.Avatar = c.User2.Avatar
+		}
+		vo.UnreadCount = c.UnreadCount1
+	} else {
+		vo.UserID = c.User1ID
+		if c.User1 != nil {
+			vo.Nickname = c.User1.Nickname
+			vo.Avatar = c.User1.Avatar
+		}
+		vo.UnreadCount = c.UnreadCount2
+	}
+
+	return vo
+}
+
+// toMessageVO 将消息模型转换为VO
+func toMessageVO(m *model.Message, currentUserID uint) *model.MessageVO {
+	if m == nil {
+		return nil
+	}
+	return &model.MessageVO{
+		ID:             m.ID,
+		SenderID:       m.SenderID,
+		ReceiverID:     m.ReceiverID,
+		ConversationID: m.ConversationID,
+		Type:           m.Type,
+		Content:        m.Content,
+		MediaURL:       m.MediaURL,
+		VideoID:        m.VideoID,
+		IsRead:         m.IsRead,
+		ReadAt:         m.ReadAt,
+		CreatedAt:      m.CreatedAt,
+		IsMine:         m.SenderID == currentUserID,
+		Sender:         m.Sender.ToAuthorVO(),
+		Receiver:       m.Receiver.ToAuthorVO(),
+		Video:          m.Video,
+	}
 }

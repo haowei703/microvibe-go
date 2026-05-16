@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"go.uber.org/zap"
+	"gorm.io/gorm"
 )
 
 // LoggingDecorator 日志装饰器 - 装饰器模式
@@ -77,7 +78,7 @@ func (ld *LoggingDecorator[T]) GetOrSet(ctx context.Context, key string, loader 
 	value, err := ld.cache.GetOrSet(ctx, key, loader, ttl)
 	elapsed := time.Since(start)
 
-	if err != nil {
+	if err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
 		logger.Error("缓存GetOrSet失败",
 			zap.String("key", key),
 			zap.Error(err),

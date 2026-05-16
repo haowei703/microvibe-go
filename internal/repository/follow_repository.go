@@ -21,6 +21,14 @@ type FollowRepository interface {
 	FindFollowings(ctx context.Context, userID uint, limit, offset int) ([]*model.Follow, error)
 	// FindFollowers 查找用户的粉丝
 	FindFollowers(ctx context.Context, userID uint, limit, offset int) ([]*model.Follow, error)
+	// CountFollowings 统计用户关注数
+	CountFollowings(ctx context.Context, userID uint) (int64, error)
+	// CountFollowers 统计用户粉丝数
+	CountFollowers(ctx context.Context, userID uint) (int64, error)
+	// FindFollowingsWithInfo 查找用户关注的高级信息 (带 Join)
+	FindFollowingsWithInfo(ctx context.Context, targetUserID, currentUserID uint, limit, offset int) ([]*model.UserFollowVO, error)
+	// FindFollowersWithInfo 查找用户粉丝的高级信息 (带 Join)
+	FindFollowersWithInfo(ctx context.Context, targetUserID, currentUserID uint, limit, offset int) ([]*model.UserFollowVO, error)
 }
 
 // followRepositoryImpl 关注数据访问层实现
@@ -142,4 +150,68 @@ func (r *followRepositoryImpl) FindFollowers(ctx context.Context, userID uint, l
 	}
 
 	return follows, nil
+}
+
+// CountFollowings 统计用户关注数
+func (r *followRepositoryImpl) CountFollowings(ctx context.Context, userID uint) (int64, error) {
+	var count int64
+	if err := r.db.WithContext(ctx).Model(&model.Follow{}).Where("user_id = ?", userID).Count(&count).Error; err != nil {
+		return 0, err
+	}
+	return count, nil
+}
+
+// CountFollowers 统计用户粉丝数
+func (r *followRepositoryImpl) CountFollowers(ctx context.Context, userID uint) (int64, error) {
+	var count int64
+	if err := r.db.WithContext(ctx).Model(&model.Follow{}).Where("followed_id = ?", userID).Count(&count).Error; err != nil {
+		return 0, err
+	}
+	return count, nil
+}
+
+// FindFollowingsWithInfo 查找用户关注的高级信息 (带 Join)
+func (r *followRepositoryImpl) FindFollowingsWithInfo(ctx context.Context, targetUserID, currentUserID uint, limit, offset int) ([]*model.UserFollowVO, error) {
+	var results []*model.UserFollowVO
+
+	query := r.db.WithContext(ctx).Table("follows").
+		Select("users.id, users.username, users.nickname, users.avatar, user_profiles.introduction").
+		Joins("INNER JOIN users ON users.id = follows.followed_id"). // 必须有对应的用户
+		Joins("LEFT JOIN user_profiles ON user_profiles.user_id = users.id").
+		Where("follows.user_id = ?", targetUserID)
+
+	if currentUserID > 0 {
+		query = query.Select("users.id, users.username, users.nickname, users.avatar, user_profiles.introduction, (f2.user_id IS NOT NULL) AS is_followed").
+			Joins("LEFT JOIN follows AS f2 ON f2.user_id = ? AND f2.followed_id = users.id", currentUserID)
+	}
+
+	err := query.Order("follows.created_at DESC").
+		Limit(limit).
+		Offset(offset).
+		Scan(&results).Error
+
+	return results, err
+}
+
+// FindFollowersWithInfo 查找用户粉丝的高级信息 (带 Join)
+func (r *followRepositoryImpl) FindFollowersWithInfo(ctx context.Context, targetUserID, currentUserID uint, limit, offset int) ([]*model.UserFollowVO, error) {
+	var results []*model.UserFollowVO
+
+	query := r.db.WithContext(ctx).Table("follows").
+		Select("users.id, users.username, users.nickname, users.avatar, user_profiles.introduction").
+		Joins("INNER JOIN users ON users.id = follows.user_id"). // 粉丝是 user_id
+		Joins("LEFT JOIN user_profiles ON user_profiles.user_id = users.id").
+		Where("follows.followed_id = ?", targetUserID)
+
+	if currentUserID > 0 {
+		query = query.Select("users.id, users.username, users.nickname, users.avatar, user_profiles.introduction, (f2.user_id IS NOT NULL) AS is_followed").
+			Joins("LEFT JOIN follows AS f2 ON f2.user_id = ? AND f2.followed_id = users.id", currentUserID)
+	}
+
+	err := query.Order("follows.created_at DESC").
+		Limit(limit).
+		Offset(offset).
+		Scan(&results).Error
+
+	return results, err
 }

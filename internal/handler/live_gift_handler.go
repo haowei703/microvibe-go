@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"microvibe-go/internal/middleware"
 	"microvibe-go/internal/service"
 	"microvibe-go/pkg/response"
 	"strconv"
@@ -75,7 +76,7 @@ func (h *LiveGiftHandler) GetGift(c *gin.Context) {
 // @Router /api/v1/live/gifts/send [post]
 func (h *LiveGiftHandler) SendGift(c *gin.Context) {
 	// 获取当前登录用户ID
-	userID, exists := c.Get("uid")
+	userID, exists := middleware.GetUserID(c)
 	if !exists {
 		response.Unauthorized(c, "未登录")
 		return
@@ -87,7 +88,7 @@ func (h *LiveGiftHandler) SendGift(c *gin.Context) {
 		return
 	}
 
-	record, err := h.giftService.SendGift(c.Request.Context(), userID.(uint), &req)
+	record, err := h.giftService.SendGift(c.Request.Context(), userID, &req)
 	if err != nil {
 		response.Error(c, response.CodeError, err.Error())
 		return
@@ -182,12 +183,12 @@ func (h *LiveGiftHandler) GetUserGiftStats(c *gin.Context) {
 		userID = uint(uid)
 	} else {
 		// 获取当前登录用户ID
-		uid, exists := c.Get("uid")
+		uid, exists := middleware.GetUserID(c)
 		if !exists {
 			response.Unauthorized(c, "未登录")
 			return
 		}
-		userID = uid.(uint)
+		userID = uid
 	}
 
 	totalValue, giftCount, err := h.giftService.GetUserGiftStats(c.Request.Context(), uint(liveID), userID)

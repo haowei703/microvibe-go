@@ -125,7 +125,7 @@ func (r *liveStreamRepositoryImpl) Update(ctx context.Context, liveStream *model
 // FindByID 根据ID查询直播间（使用Redis缓存）
 func (r *liveStreamRepositoryImpl) FindByID(ctx context.Context, id uint) (*model.LiveStream, error) {
 	// 使用 WithCache 装饰器自动管理缓存
-	return cache.WithCache[*model.LiveStream](
+	return cache.WithCache(
 		cache.CacheConfig{
 			CacheName: "livestream",
 			KeyPrefix: "livestream:id",
@@ -147,7 +147,7 @@ func (r *liveStreamRepositoryImpl) FindByID(ctx context.Context, id uint) (*mode
 // FindByRoomID 根据房间ID查询直播间（使用Redis缓存）
 func (r *liveStreamRepositoryImpl) FindByRoomID(ctx context.Context, roomID string) (*model.LiveStream, error) {
 	// 使用 WithCache 装饰器自动管理缓存
-	return cache.WithCache[*model.LiveStream](
+	return cache.WithCache(
 		cache.CacheConfig{
 			CacheName: "livestream",
 			KeyPrefix: "livestream:room",
@@ -170,7 +170,7 @@ func (r *liveStreamRepositoryImpl) FindByRoomID(ctx context.Context, roomID stri
 // FindByStreamKey 根据推流密钥查询直播间（使用Redis缓存）
 func (r *liveStreamRepositoryImpl) FindByStreamKey(ctx context.Context, streamKey string) (*model.LiveStream, error) {
 	// 使用 WithCache 装饰器自动管理缓存
-	return cache.WithCache[*model.LiveStream](
+	return cache.WithCache(
 		cache.CacheConfig{
 			CacheName: "livestream",
 			KeyPrefix: "livestream:key",
@@ -387,7 +387,7 @@ func (r *liveStreamRepositoryImpl) ListByCategory(ctx context.Context, categoryI
 // ListHotLiveStreams 查询热门直播间（按在线人数排序，使用Redis缓存）
 func (r *liveStreamRepositoryImpl) ListHotLiveStreams(ctx context.Context, limit int) ([]*model.LiveStream, error) {
 	// 使用 WithCache 装饰器缓存热门直播列表
-	return cache.WithCache[[]*model.LiveStream](
+	return cache.WithCache(
 		cache.CacheConfig{
 			CacheName: "livestream",
 			KeyPrefix: "livestream:hot",

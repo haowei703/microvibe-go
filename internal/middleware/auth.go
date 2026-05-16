@@ -39,7 +39,21 @@ func AuthMiddleware(cfg *config.Config) gin.HandlerFunc {
 		// 将用户信息保存到上下文
 		c.Set("uid", claims.UserID)
 		c.Set("username", claims.Username)
+		c.Set("role", claims.Role)
 
+		c.Next()
+	}
+}
+
+// AdminMiddleware 管理员认证中间件
+func AdminMiddleware() gin.HandlerFunc {
+	return func(c *gin.Context) {
+		role, exists := c.Get("role")
+		if !exists || role.(int8) != 1 {
+			response.Forbidden(c, "权限不足，仅限管理员访问")
+			c.Abort()
+			return
+		}
 		c.Next()
 	}
 }
@@ -53,7 +67,7 @@ func OptionalAuthMiddleware(cfg *config.Config) gin.HandlerFunc {
 			if len(parts) == 2 && parts[0] == "Bearer" {
 				claims, err := utils.ParseToken(parts[1], cfg.JWT.Secret)
 				if err == nil {
-					c.Set("user_id", claims.UserID)
+					c.Set("uid", claims.UserID)
 					c.Set("username", claims.Username)
 				}
 			}

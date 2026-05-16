@@ -10,6 +10,7 @@ database:
   password: "postgres"
   dbname: "microvibe"
   sslmode: "disable"
+  log_sql: false  # SQL 语句日志，生产环境建议关闭；可通过环境变量 DATABASE_LOG_SQL=true 开启
 
 redis:
   host: "localhost"
@@ -29,6 +30,7 @@ upload:
     - "image/jpeg"
     - "image/png"
   path: "./uploads"  # 上传文件保存路径
+  base_url: "http://localhost:8080"  # 媒体文件访问基础URL
 
 # 流媒体服务器配置（RTMP/HLS/FLV）
 streaming:
@@ -106,8 +108,9 @@ oauth:
     enabled: true  # 启用 Authentik OAuth2/OIDC 认证
     issuer_url: "http://localhost:9000/application/o/microvibe/"
     client_id: "microvibe-backend"
-    client_secret: "a03fTUqhny1oPPrdDtaUdkzp9R7YyMWMcfaOmPQfU734n2hxMsRud1YgOuFvJOvFr8M95l3BXX9AHd1R3FoVNgYHlp2jlqpFirw7zShZN7bjDgxaWkDThhMWnjbeZORv"
-    redirect_url: "http://localhost:8888/api/v1/oauth/callback"
+    client_secret: "zMV1Dw0nDDshhAlBofzrco4wj2lQhBRLuSItS4k4GnwMh69ghNdLwp4GIGtbrfCuUW6tvaktasxtmYllwGeaDqR1AevCHprgaJPNpYp1vzGr8PhPT82gqMg4bKKV9Mv0"
+    redirect_url: "http://localhost:8080/api/v1/oauth/callback"
+    frontend_url: "http://localhost:52441/auth/callback"
     scopes:
       - "openid"
       - "email"

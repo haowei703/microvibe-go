@@ -36,6 +36,16 @@ func main() {
 	}
 	logger.Info("PostgreSQL 连接成功")
 
+	// 自动迁移数据库
+	if err := database.AutoMigrate(db); err != nil {
+		logger.Fatal("数据库自动迁移失败", zap.Error(err))
+	}
+
+	// 填充初始数据
+	if err := database.SeedData(db); err != nil {
+		logger.Error("填充初始数据失败", zap.Error(err))
+	}
+
 	redisClient, err := database.InitRedis(cfg)
 	if err != nil {
 		logger.Fatal("连接 Redis 失败", zap.Error(err))

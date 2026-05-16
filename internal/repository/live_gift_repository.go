@@ -70,7 +70,7 @@ func (r *liveGiftRepositoryImpl) Update(ctx context.Context, gift *model.LiveGif
 
 // FindByID 根据ID查询礼物（使用Redis缓存）
 func (r *liveGiftRepositoryImpl) FindByID(ctx context.Context, id uint) (*model.LiveGift, error) {
-	return cache.WithCache[*model.LiveGift](
+	return cache.WithCache(
 		cache.CacheConfig{
 			CacheName: "livegift",
 			KeyPrefix: "live:gift:id",
@@ -91,7 +91,7 @@ func (r *liveGiftRepositoryImpl) List(ctx context.Context, giftType int8, status
 	// 根据不同的筛选条件生成不同的缓存键
 	cacheKey := fmt.Sprintf("type:%d:status:%d", giftType, status)
 
-	return cache.WithCache[[]*model.LiveGift](
+	return cache.WithCache(
 		cache.CacheConfig{
 			CacheName: "livegift",
 			KeyPrefix: "live:gift:list",
@@ -189,7 +189,7 @@ func (r *liveGiftRepositoryImpl) GetUserGiftStats(ctx context.Context, liveID, u
 // GetTopGivers 获取直播间送礼榜单（使用Redis缓存）
 func (r *liveGiftRepositoryImpl) GetTopGivers(ctx context.Context, liveID uint, limit int) ([]*model.LiveGiftRecord, error) {
 	// 使用缓存，实时性要求较高，缓存时间设置为1分钟
-	return cache.WithCache[[]*model.LiveGiftRecord](
+	return cache.WithCache(
 		cache.CacheConfig{
 			CacheName: "livegift",
 			KeyPrefix: "live:gift:top",

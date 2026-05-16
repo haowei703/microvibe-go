@@ -19,8 +19,10 @@ type VideoRepository interface {
 	FindByID(ctx context.Context, id uint) (*model.Video, error)
 	// FindByIDs 根据ID列表批量查找视频
 	FindByIDs(ctx context.Context, ids []uint) ([]*model.Video, error)
-	// FindByUserID 查找用户的视频列表
+	// FindByUserID 查找用户的视频列表（公开作品）
 	FindByUserID(ctx context.Context, userID uint, limit, offset int) ([]*model.Video, error)
+	// FindAllByUserID 查找用户的所有视频列表（包含私密/审核中作品）
+	FindAllByUserID(ctx context.Context, userID uint, limit, offset int) ([]*model.Video, error)
 	// FindByCategoryID 根据分类查找视频
 	FindByCategoryID(ctx context.Context, categoryID uint, limit, offset int) ([]*model.Video, error)
 	// FindHotVideos 查找热门视频
@@ -33,10 +35,20 @@ type VideoRepository interface {
 	IncrementPlayCount(ctx context.Context, id uint) error
 	// IncrementLikeCount 增加点赞数
 	IncrementLikeCount(ctx context.Context, id uint, delta int) error
+	// IncrementFavoriteCount 增加收藏数
+	IncrementFavoriteCount(ctx context.Context, id uint, delta int) error
 	// IncrementCommentCount 增加评论数
 	IncrementCommentCount(ctx context.Context, id uint, delta int) error
-	// CountByUserID 统计用户的视频总数
+	// IncrementShareCount 增加分享数
+	IncrementShareCount(ctx context.Context, id uint, delta int) error
+	// UpdateFields 更新指定字段
+	UpdateFields(ctx context.Context, id uint, fields map[string]interface{}) error
+	// CountByUserID 统计用户的视频总数（公开作品）
 	CountByUserID(ctx context.Context, userID uint) (int64, error)
+	// CountAllByUserID 统计用户的所有视频总数
+	CountAllByUserID(ctx context.Context, userID uint) (int64, error)
+	// List 分页获取所有视频
+	List(ctx context.Context, page, pageSize int, status *int8) ([]*model.Video, int64, error)
 }
 
 // videoRepositoryImpl 视频数据访问层实现
@@ -94,21 +106,44 @@ func (r *videoRepositoryImpl) FindByIDs(ctx context.Context, ids []uint) ([]*mod
 	return videos, nil
 }
 
-// FindByUserID 查找用户的视频列表
+// FindByUserID 查找用户的视频列表（公开作品）
 func (r *videoRepositoryImpl) FindByUserID(ctx context.Context, userID uint, limit, offset int) ([]*model.Video, error) {
-	logger.Debug("查找用户视频列表",
+	logger.Debug("查找用户视频列表(公开)",
 		zap.Uint("user_id", userID),
 		zap.Int("limit", limit),
 		zap.Int("offset", offset))
 
 	var videos []*model.Video
 	if err := r.db.WithContext(ctx).
+		Preload("User").
 		Where("user_id = ? AND status = ?", userID, 1).
 		Order("published_at DESC").
 		Limit(limit).
 		Offset(offset).
 		Find(&videos).Error; err != nil {
 		logger.Error("查找用户视频列表失败", zap.Error(err), zap.Uint("user_id", userID))
+		return nil, err
+	}
+
+	return videos, nil
+}
+
+// FindAllByUserID 查找用户的所有视频列表（包含私密/审核中作品）
+func (r *videoRepositoryImpl) FindAllByUserID(ctx context.Context, userID uint, limit, offset int) ([]*model.Video, error) {
+	logger.Debug("查找用户所有视频列表",
+		zap.Uint("user_id", userID),
+		zap.Int("limit", limit),
+		zap.Int("offset", offset))
+
+	var videos []*model.Video
+	if err := r.db.WithContext(ctx).
+		Preload("User").
+		Where("user_id = ?", userID).
+		Order("created_at DESC").
+		Limit(limit).
+		Offset(offset).
+		Find(&videos).Error; err != nil {
+		logger.Error("查找用户所有视频列表失败", zap.Error(err), zap.Uint("user_id", userID))
 		return nil, err
 	}
 
@@ -124,6 +159,7 @@ func (r *videoRepositoryImpl) FindByCategoryID(ctx context.Context, categoryID u
 
 	var videos []*model.Video
 	if err := r.db.WithContext(ctx).
+		Preload("User").
 		Where("category_id = ? AND status = ?", categoryID, 1).
 		Order("hot_score DESC").
 		Limit(limit).
@@ -145,6 +181,7 @@ func (r *videoRepositoryImpl) FindHotVideos(ctx context.Context, since time.Time
 
 	var videos []*model.Video
 	if err := r.db.WithContext(ctx).
+		Preload("User").
 		Where("status = ? AND published_at > ?", 1, since).
 		Order("hot_score DESC").
 		Limit(limit).
@@ -219,9 +256,33 @@ func (r *videoRepositoryImpl) IncrementCommentCount(ctx context.Context, id uint
 	return nil
 }
 
-// CountByUserID 统计用户的视频总数
+// IncrementShareCount 增加分享数
+func (r *videoRepositoryImpl) IncrementShareCount(ctx context.Context, id uint, delta int) error {
+	if err := r.db.WithContext(ctx).Model(&model.Video{}).
+		Where("id = ?", id).
+		UpdateColumn("share_count", gorm.Expr("share_count + ?", delta)).Error; err != nil {
+		logger.Error("更新分享数失败", zap.Error(err), zap.Uint("video_id", id))
+		return err
+	}
+
+	return nil
+}
+
+// IncrementFavoriteCount 增加收藏数
+func (r *videoRepositoryImpl) IncrementFavoriteCount(ctx context.Context, id uint, delta int) error {
+	if err := r.db.WithContext(ctx).Model(&model.Video{}).
+		Where("id = ?", id).
+		UpdateColumn("favorite_count", gorm.Expr("favorite_count + ?", delta)).Error; err != nil {
+		logger.Error("更新收藏数失败", zap.Error(err), zap.Uint("video_id", id))
+		return err
+	}
+
+	return nil
+}
+
+// CountByUserID 统计用户的视频总数（公开作品）
 func (r *videoRepositoryImpl) CountByUserID(ctx context.Context, userID uint) (int64, error) {
-	logger.Debug("统计用户视频总数", zap.Uint("user_id", userID))
+	logger.Debug("统计用户视频总数(公开)", zap.Uint("user_id", userID))
 
 	var count int64
 	if err := r.db.WithContext(ctx).Model(&model.Video{}).
@@ -232,4 +293,44 @@ func (r *videoRepositoryImpl) CountByUserID(ctx context.Context, userID uint) (i
 	}
 
 	return count, nil
+}
+
+// CountAllByUserID 统计用户的所有视频总数
+func (r *videoRepositoryImpl) CountAllByUserID(ctx context.Context, userID uint) (int64, error) {
+	logger.Debug("统计用户所有视频总数", zap.Uint("user_id", userID))
+
+	var count int64
+	if err := r.db.WithContext(ctx).Model(&model.Video{}).
+		Where("user_id = ?", userID).
+		Count(&count).Error; err != nil {
+		logger.Error("统计用户所有视频总数失败", zap.Error(err), zap.Uint("user_id", userID))
+		return 0, err
+	}
+
+	return count, nil
+}
+
+// UpdateFields 更新指定字段
+func (r *videoRepositoryImpl) UpdateFields(ctx context.Context, id uint, fields map[string]interface{}) error {
+	logger.Debug("更新视频字段", zap.Uint("video_id", id), zap.Any("fields", fields))
+
+	if err := r.db.WithContext(ctx).Model(&model.Video{}).Where("id = ?", id).Updates(fields).Error; err != nil {
+		logger.Error("更新视频字段失败", zap.Error(err), zap.Uint("video_id", id))
+		return err
+	}
+	return nil
+}
+
+func (r *videoRepositoryImpl) List(ctx context.Context, page, pageSize int, status *int8) ([]*model.Video, int64, error) {
+	var videos []*model.Video
+	var total int64
+	db := r.db.WithContext(ctx).Model(&model.Video{})
+	if status != nil {
+		db = db.Where("status = ?", *status)
+	}
+	if err := db.Count(&total).Error; err != nil {
+		return nil, 0, err
+	}
+	err := db.Preload("User").Limit(pageSize).Offset((page - 1) * pageSize).Order("created_at DESC").Find(&videos).Error
+	return videos, total, err
 }

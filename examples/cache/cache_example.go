@@ -316,7 +316,7 @@ func example4Decorator() {
 		MustBuild()
 
 	// 添加日志装饰器
-	loggedCache := cache.NewLoggingDecorator[*User](baseCache)
+	loggedCache := cache.NewLoggingDecorator(baseCache)
 
 	ctx := context.Background()
 

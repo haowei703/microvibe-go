@@ -35,6 +35,7 @@ type DatabaseConfig struct {
 	Password string
 	DBName   string
 	SSLMode  string
+	LogSQL   bool `mapstructure:"log_sql"` // 是否开启 SQL 日志，默认 false
 }
 
 // RedisConfig Redis配置
@@ -56,6 +57,7 @@ type UploadConfig struct {
 	MaxSize      int64    // 最大文件大小（字节）
 	AllowedTypes []string // 允许的文件类型
 	Path         string   // 上传路径
+	BaseURL      string   `mapstructure:"base_url"` // 基础URL，用于拼接完整路径
 }
 
 // StreamingConfig 流媒体服务器配置
@@ -141,6 +143,7 @@ type AuthentikConfig struct {
 	ClientID     string   `mapstructure:"client_id"`
 	ClientSecret string   `mapstructure:"client_secret"`
 	RedirectURL  string   `mapstructure:"redirect_url"`
+	FrontendURL  string   `mapstructure:"frontend_url"`
 	Scopes       []string `mapstructure:"scopes"`
 }
 
@@ -148,6 +151,8 @@ func Load() (*Config, error) {
 	viper.SetConfigName("config")
 	viper.SetConfigType("yaml")
 	viper.AddConfigPath("./configs")
+	viper.AddConfigPath("../configs")
+	viper.AddConfigPath("../../configs")
 	viper.AddConfigPath(".")
 
 	// 设置默认值
@@ -173,6 +178,7 @@ func Load() (*Config, error) {
 	viper.SetDefault("upload.maxsize", 104857600) // 100MB
 	viper.SetDefault("upload.allowedtypes", []string{"video/mp4", "video/avi", "image/jpeg", "image/png"})
 	viper.SetDefault("upload.path", "./uploads")
+	viper.SetDefault("upload.base_url", "http://localhost:8080")
 
 	// 流媒体服务器默认配置
 	viper.SetDefault("streaming.rtmp_server", "rtmp://localhost:1935/live")
@@ -222,6 +228,7 @@ func Load() (*Config, error) {
 	viper.SetDefault("oauth.authentik.client_id", "microvibe-backend")
 	viper.SetDefault("oauth.authentik.client_secret", "")
 	viper.SetDefault("oauth.authentik.redirect_url", "http://localhost:8888/api/v1/oauth/callback")
+	viper.SetDefault("oauth.authentik.frontend_url", "")
 	viper.SetDefault("oauth.authentik.scopes", []string{"openid", "email", "profile"})
 
 	// 允许环境变量覆盖

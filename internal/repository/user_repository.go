@@ -3,6 +3,7 @@ package repository
 import (
 	"context"
 	"fmt"
+
 	"microvibe-go/internal/model"
 	"microvibe-go/pkg/cache"
 	pkgerrors "microvibe-go/pkg/errors"
@@ -19,18 +20,22 @@ type UserRepository interface {
 	Create(ctx context.Context, user *model.User) error
 	// FindByID 根据ID查找用户
 	FindByID(ctx context.Context, id uint) (*model.User, error)
-	// FindByUsername 根据用户名查找用户
-	FindByUsername(ctx context.Context, username string) (*model.User, error)
-	// FindByEmail 根据邮箱查找用户
-	FindByEmail(ctx context.Context, email string) (*model.User, error)
-	// Update 更新用户信息
+	// FindByIDs 根据ID列表批量查找用户
+	FindByIDs(ctx context.Context, ids []uint) ([]*model.User, error)
+	// FindByUsername 根据用户名查找用户，useCache=false 时跳过缓存（用于登录校验密码）
+	FindByUsername(ctx context.Context, username string, useCache ...bool) (*model.User, error)
+	// FindByEmail 根据邮箱查找用户，useCache=false 时跳过缓存
+	FindByEmail(ctx context.Context, email string, useCache ...bool) (*model.User, error)
+	// Update 更新用户指定字段
 	Update(ctx context.Context, user *model.User) error
-	// UpdateFields 更新指定字段
+	// UpdateFields 用 map 更新指定字段，可写入零值
 	UpdateFields(ctx context.Context, id uint, fields map[string]interface{}) error
 	// IncrementFollowCount 增加关注数
 	IncrementFollowCount(ctx context.Context, id uint, delta int) error
 	// IncrementFollowerCount 增加粉丝数
 	IncrementFollowerCount(ctx context.Context, id uint, delta int) error
+	// List 分页获取所有用户
+	List(ctx context.Context, page, pageSize int, query string) ([]*model.User, int64, error)
 }
 
 // userRepositoryImpl 用户数据访问层实现
@@ -58,12 +63,41 @@ func (r *userRepositoryImpl) Create(ctx context.Context, user *model.User) error
 	return nil
 }
 
+// List 分页获取所有用户
+func (r *userRepositoryImpl) List(ctx context.Context, page, pageSize int, query string) ([]*model.User, int64, error) {
+	var users []*model.User
+	var total int64
+	db := r.db.WithContext(ctx).Model(&model.User{})
+	if query != "" {
+		q := "%" + query + "%"
+		db = db.Where("username LIKE ? OR nickname LIKE ? OR email LIKE ?", q, q, q)
+	}
+	if err := db.Count(&total).Error; err != nil {
+		return nil, 0, err
+	}
+	err := db.Limit(pageSize).Offset((page - 1) * pageSize).Order("created_at DESC").Find(&users).Error
+	return users, total, err
+}
+
+// FindByIDs 根据ID列表批量查找用户
+func (r *userRepositoryImpl) FindByIDs(ctx context.Context, ids []uint) ([]*model.User, error) {
+	if len(ids) == 0 {
+		return nil, nil
+	}
+	var users []*model.User
+	if err := r.db.WithContext(ctx).Where("id IN ?", ids).Find(&users).Error; err != nil {
+		logger.Error("批量查找用户失败", zap.Error(err))
+		return nil, err
+	}
+	return users, nil
+}
+
 // FindByID 根据ID查找用户（自动缓存）
 func (r *userRepositoryImpl) FindByID(ctx context.Context, id uint) (*model.User, error) {
 	logger.Debug("查找用户", zap.Uint("user_id", id))
 
 	// 使用装饰器自动管理缓存
-	return cache.WithCache[*model.User](
+	return cache.WithCache(
 		cache.CacheConfig{
 			CacheName: "user",
 			KeyPrefix: "user:id",
@@ -85,57 +119,65 @@ func (r *userRepositoryImpl) FindByID(ctx context.Context, id uint) (*model.User
 	)(ctx, id)
 }
 
-// FindByUsername 根据用户名查找用户（自动缓存）
-func (r *userRepositoryImpl) FindByUsername(ctx context.Context, username string) (*model.User, error) {
+// FindByUsername 根据用户名查找用户
+func (r *userRepositoryImpl) FindByUsername(ctx context.Context, username string, useCache ...bool) (*model.User, error) {
 	logger.Debug("根据用户名查找用户", zap.String("username", username))
 
-	// 使用装饰器自动管理缓存
-	return cache.WithCache[*model.User](
+	loader := func() (*model.User, error) {
+		var user model.User
+		if err := r.db.WithContext(ctx).Where("username = ?", username).First(&user).Error; err != nil {
+			if !pkgerrors.IsNotFound(err) {
+				logger.Error("查找用户失败", zap.Error(err), zap.String("username", username))
+			}
+			return nil, err
+		}
+		return &user, nil
+	}
+
+	if len(useCache) > 0 && !useCache[0] {
+		return loader()
+	}
+
+	return cache.WithCache(
 		cache.CacheConfig{
 			CacheName: "user",
 			KeyPrefix: "user:username",
 			TTL:       10 * time.Minute,
 		},
-		func() (*model.User, error) {
-			// 实际的数据库查询逻辑
-			var user model.User
-			if err := r.db.WithContext(ctx).Where("username = ?", username).First(&user).Error; err != nil {
-				if !pkgerrors.IsNotFound(err) {
-					logger.Error("查找用户失败", zap.Error(err), zap.String("username", username))
-				}
-				return nil, err
-			}
-			return &user, nil
-		},
+		loader,
 	)(ctx, username)
 }
 
-// FindByEmail 根据邮箱查找用户（自动缓存）
-func (r *userRepositoryImpl) FindByEmail(ctx context.Context, email string) (*model.User, error) {
+// FindByEmail 根据邮箱查找用户
+func (r *userRepositoryImpl) FindByEmail(ctx context.Context, email string, useCache ...bool) (*model.User, error) {
 	logger.Debug("根据邮箱查找用户", zap.String("email", email))
 
-	// 使用装饰器自动管理缓存
-	return cache.WithCache[*model.User](
+	loader := func() (*model.User, error) {
+		var user model.User
+		if err := r.db.WithContext(ctx).Where("email = ?", email).First(&user).Error; err != nil {
+			if !pkgerrors.IsNotFound(err) {
+				logger.Error("查找用户失败", zap.Error(err), zap.String("email", email))
+			}
+			return nil, err
+		}
+		return &user, nil
+	}
+
+	if len(useCache) > 0 && !useCache[0] {
+		return loader()
+	}
+
+	return cache.WithCache(
 		cache.CacheConfig{
 			CacheName: "user",
 			KeyPrefix: "user:email",
 			TTL:       10 * time.Minute,
 		},
-		func() (*model.User, error) {
-			// 实际的数据库查询逻辑
-			var user model.User
-			if err := r.db.WithContext(ctx).Where("email = ?", email).First(&user).Error; err != nil {
-				if !pkgerrors.IsNotFound(err) {
-					logger.Error("查找用户失败", zap.Error(err), zap.String("email", email))
-				}
-				return nil, err
-			}
-			return &user, nil
-		},
+		loader,
 	)(ctx, email)
 }
 
-// Update 更新用户信息（自动清除缓存）
+// Update 更新用户指定字段
 func (r *userRepositoryImpl) Update(ctx context.Context, user *model.User) error {
 	logger.Debug("更新用户信息", zap.Uint("user_id", user.ID))
 
@@ -147,8 +189,7 @@ func (r *userRepositoryImpl) Update(ctx context.Context, user *model.User) error
 	}
 
 	return cache.WithMultiCacheEvict("user", keys, func() error {
-		// 实际的数据库更新逻辑
-		if err := r.db.WithContext(ctx).Save(user).Error; err != nil {
+		if err := r.db.WithContext(ctx).Model(&model.User{}).Where("id = ?", user.ID).Updates(user).Error; err != nil {
 			logger.Error("更新用户失败", zap.Error(err), zap.Uint("user_id", user.ID))
 			return err
 		}
@@ -157,54 +198,74 @@ func (r *userRepositoryImpl) Update(ctx context.Context, user *model.User) error
 	})(ctx)
 }
 
-// UpdateFields 更新指定字段（自动清除缓存）
+// UpdateFields 通过 map 更新字段，确保零值（false/0/""）也能写入
 func (r *userRepositoryImpl) UpdateFields(ctx context.Context, id uint, fields map[string]interface{}) error {
-	logger.Debug("更新用户字段", zap.Uint("user_id", id), zap.Any("fields", fields))
+	if len(fields) == 0 {
+		return nil
+	}
+	logger.Debug("按字段更新用户", zap.Uint("user_id", id), zap.Int("field_count", len(fields)))
 
-	// 使用装饰器自动清除ID相关的缓存
-	// 注意：由于不知道username和email，这里只清除ID缓存
-	// 如果更新了username或email，建议使用Update方法而非UpdateFields
+	// 取一次用户用于清缓存（username/email 字段构造 key）
+	var u model.User
+	if err := r.db.WithContext(ctx).Select("id", "username", "email").First(&u, id).Error; err != nil {
+		logger.Error("查找用户失败", zap.Error(err), zap.Uint("user_id", id))
+		return err
+	}
+
+	keys := []string{
+		fmt.Sprintf("user:id:%d", u.ID),
+		fmt.Sprintf("user:username:%s", u.Username),
+		fmt.Sprintf("user:email:%s", u.Email),
+	}
+
+	return cache.WithMultiCacheEvict("user", keys, func() error {
+		if err := r.db.WithContext(ctx).Model(&model.User{}).Where("id = ?", id).Updates(fields).Error; err != nil {
+			logger.Error("按字段更新用户失败", zap.Error(err), zap.Uint("user_id", id))
+			return err
+		}
+		logger.Info("按字段更新用户成功", zap.Uint("user_id", id))
+		return nil
+	})(ctx)
+}
+
+// IncrementFollowCount 增加关注数（并清除用户缓存）
+func (r *userRepositoryImpl) IncrementFollowCount(ctx context.Context, id uint, delta int) error {
+	logger.Debug("更新关注数", zap.Uint("user_id", id), zap.Int("delta", delta))
+
 	return cache.WithCacheEvict(
 		cache.CacheConfig{
 			CacheName: "user",
 			KeyPrefix: "user:id",
 		},
 		func() error {
-			// 实际的数据库更新逻辑
-			if err := r.db.WithContext(ctx).Model(&model.User{}).Where("id = ?", id).Updates(fields).Error; err != nil {
-				logger.Error("更新用户字段失败", zap.Error(err), zap.Uint("user_id", id))
+			if err := r.db.WithContext(ctx).Model(&model.User{}).
+				Where("id = ?", id).
+				UpdateColumn("follow_count", gorm.Expr("follow_count + ?", delta)).Error; err != nil {
+				logger.Error("更新关注数失败", zap.Error(err), zap.Uint("user_id", id))
 				return err
 			}
-			logger.Info("用户字段更新成功", zap.Uint("user_id", id))
 			return nil
 		},
 	)(ctx, id)
 }
 
-// IncrementFollowCount 增加关注数
-func (r *userRepositoryImpl) IncrementFollowCount(ctx context.Context, id uint, delta int) error {
-	logger.Debug("更新关注数", zap.Uint("user_id", id), zap.Int("delta", delta))
-
-	if err := r.db.WithContext(ctx).Model(&model.User{}).
-		Where("id = ?", id).
-		UpdateColumn("follow_count", gorm.Expr("follow_count + ?", delta)).Error; err != nil {
-		logger.Error("更新关注数失败", zap.Error(err), zap.Uint("user_id", id))
-		return err
-	}
-
-	return nil
-}
-
-// IncrementFollowerCount 增加粉丝数
+// IncrementFollowerCount 增加粉丝数（并清除用户缓存）
 func (r *userRepositoryImpl) IncrementFollowerCount(ctx context.Context, id uint, delta int) error {
 	logger.Debug("更新粉丝数", zap.Uint("user_id", id), zap.Int("delta", delta))
 
-	if err := r.db.WithContext(ctx).Model(&model.User{}).
-		Where("id = ?", id).
-		UpdateColumn("follower_count", gorm.Expr("follower_count + ?", delta)).Error; err != nil {
-		logger.Error("更新粉丝数失败", zap.Error(err), zap.Uint("user_id", id))
-		return err
-	}
-
-	return nil
+	return cache.WithCacheEvict(
+		cache.CacheConfig{
+			CacheName: "user",
+			KeyPrefix: "user:id",
+		},
+		func() error {
+			if err := r.db.WithContext(ctx).Model(&model.User{}).
+				Where("id = ?", id).
+				UpdateColumn("follower_count", gorm.Expr("follower_count + ?", delta)).Error; err != nil {
+				logger.Error("更新粉丝数失败", zap.Error(err), zap.Uint("user_id", id))
+				return err
+			}
+			return nil
+		},
+	)(ctx, id)
 }

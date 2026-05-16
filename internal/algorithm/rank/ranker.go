@@ -3,8 +3,10 @@ package rank
 import (
 	"context"
 	"math"
+	"microvibe-go/internal/algorithm/feature"
 	"microvibe-go/internal/model"
 	"sort"
+	"time"
 
 	"github.com/redis/go-redis/v9"
 	"gorm.io/gorm"
@@ -66,7 +68,7 @@ func (r *Ranker) Rank(ctx context.Context, req *RankRequest) ([]*model.Video, er
 
 // calculateScore 计算视频的综合分数
 // 采用多目标加权融合的方式
-func (r *Ranker) calculateScore(ctx context.Context, userID uint, video *model.Video, features map[string]interface{}) float64 {
+func (r *Ranker) calculateScore(_ context.Context, userID uint, video *model.Video, features map[string]interface{}) float64 {
 	// 1. 点击率预估（CTR）权重：30%
 	ctrScore := r.estimateCTR(userID, video, features) * 0.3
 
@@ -89,10 +91,7 @@ func (r *Ranker) calculateScore(ctx context.Context, userID uint, video *model.V
 }
 
 // estimateCTR 预估点击率
-func (r *Ranker) estimateCTR(userID uint, video *model.Video, features map[string]interface{}) float64 {
-	// 简化的CTR预估模型
-	// 实际项目中可以使用机器学习模型（LR、GBDT、DeepFM等）
-
+func (r *Ranker) estimateCTR(_ uint, video *model.Video, features map[string]interface{}) float64 {
 	score := 0.5 // 基础分
 
 	// 视频质量分
@@ -104,14 +103,14 @@ func (r *Ranker) estimateCTR(userID uint, video *model.Video, features map[strin
 		score += historicalCTR * 0.3
 	}
 
-	// 用户兴趣匹配度
-	if userFeature, ok := features["user"]; ok {
-		if uf, ok := userFeature.(map[string]interface{}); ok {
-			if interests, ok := uf["interest_tags"].(map[uint]float64); ok {
-				if interestScore, exists := interests[video.CategoryID]; exists {
-					score += interestScore * 0.5
-				}
-			}
+	// 用户兴趣匹配度：直接断言为 *feature.UserFeature
+	if uf, ok := features["user"].(*feature.UserFeature); ok && uf != nil {
+		catID := uint(0)
+		if video.CategoryID != nil {
+			catID = *video.CategoryID
+		}
+		if interestScore, exists := uf.InterestTags[catID]; exists {
+			score += interestScore * 0.5
 		}
 	}
 
@@ -119,7 +118,7 @@ func (r *Ranker) estimateCTR(userID uint, video *model.Video, features map[strin
 }
 
 // estimateFinishRate 预估完播率
-func (r *Ranker) estimateFinishRate(userID uint, video *model.Video, features map[string]interface{}) float64 {
+func (r *Ranker) estimateFinishRate(_ uint, video *model.Video, features map[string]interface{}) float64 {
 	score := 0.5 // 基础分
 
 	// 视频时长因素（太长的视频完播率通常较低）
@@ -130,27 +129,24 @@ func (r *Ranker) estimateFinishRate(userID uint, video *model.Video, features ma
 	score += durationScore * 0.3
 
 	// 历史完播率数据
-	var stats model.VideoStats
+	var stats []model.VideoStats
 	if err := r.db.Where("video_id = ?", video.ID).
 		Order("date DESC").
-		First(&stats).Error; err == nil {
-		score += stats.FinishRate * 0.4
+		Limit(1).
+		Find(&stats).Error; err == nil && len(stats) > 0 {
+		score += stats[0].FinishRate * 0.4
 	}
 
 	// 用户平均完播率
-	if userFeature, ok := features["user"]; ok {
-		if uf, ok := userFeature.(map[string]interface{}); ok {
-			if avgFinishRate, ok := uf["avg_finish_rate"].(float64); ok {
-				score += avgFinishRate * 0.3
-			}
-		}
+	if uf, ok := features["user"].(*feature.UserFeature); ok && uf != nil {
+		score += uf.AvgFinishRate * 0.3
 	}
 
 	return math.Min(score, 1.0)
 }
 
 // estimateEngagement 预估互动率
-func (r *Ranker) estimateEngagement(userID uint, video *model.Video, features map[string]interface{}) float64 {
+func (r *Ranker) estimateEngagement(_ uint, video *model.Video, _ map[string]interface{}) float64 {
 	score := 0.0
 
 	if video.PlayCount > 0 {
@@ -176,9 +172,8 @@ func (r *Ranker) calculateFreshnessScore(video *model.Video) float64 {
 		return 0.0
 	}
 
-	// 使用指数衰减函数
-	// 半衰期为24小时
-	hoursSincePublish := float64(video.UpdatedAt.Unix()-video.PublishedAt.Unix()) / 3600.0
+	// 使用指数衰减函数，半衰期为24小时
+	hoursSincePublish := time.Since(*video.PublishedAt).Hours()
 	halfLife := 24.0
 	freshnessScore := math.Exp(-0.693 * hoursSincePublish / halfLife)
 
@@ -217,11 +212,18 @@ func (r *Ranker) ApplyDiversity(videos []*model.Video, diversityRatio float64) [
 	result := make([]*model.Video, 0, len(videos))
 
 	for _, video := range videos {
-		// 如果该分类已经太多，跳过（实现多样性）
-		if categoryCount[video.CategoryID] >= 3 {
+		// 如果没有分类，不参与强力打散限制（避免未分类视频被大面积过滤）
+		if video.CategoryID == nil {
+			result = append(result, video)
 			continue
 		}
-		categoryCount[video.CategoryID]++
+
+		catID := *video.CategoryID
+		// 如果该分类已经太多，跳过（实现多样性）
+		if categoryCount[catID] >= 3 {
+			continue
+		}
+		categoryCount[catID]++
 		result = append(result, video)
 	}
 

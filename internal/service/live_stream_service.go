@@ -731,7 +731,7 @@ func (s *liveStreamServiceImpl) ListByCategory(ctx context.Context, categoryID u
 // registerRTMPAuth 注册 RTMP 推流认证（可选）
 // 如果你的 RTMP 服务器（如 nginx-rtmp）支持动态认证，可以实现这个方法
 // 例如：将 streamKey 存储到 Redis，nginx-rtmp 通过 HTTP 回调验证
-func (s *liveStreamServiceImpl) registerRTMPAuth(ctx context.Context, streamKey string, userID uint) error {
+func (s *liveStreamServiceImpl) registerRTMPAuth(_ context.Context, streamKey string, userID uint) error {
 	// 示例实现：将推流密钥存储到 Redis，设置过期时间
 	// 格式: rtmp:auth:{streamKey} -> {userID}:{expireTime}
 	//

@@ -2,6 +2,8 @@ package model
 
 import (
 	"time"
+
+	"gorm.io/gorm"
 )
 
 // UserBehavior 用户行为模型（用于推荐算法）
@@ -113,4 +115,41 @@ type HotSearch struct {
 // TableName 指定表名
 func (HotSearch) TableName() string {
 	return "hot_searches"
+}
+
+// VideoHistory 视频播放历史
+type VideoHistory struct {
+	ID        uint      `gorm:"primarykey" json:"id"`
+	CreatedAt time.Time `json:"created_at"`
+	UpdatedAt time.Time `json:"updated_at"`
+
+	UserID    uint           `gorm:"index:idx_user_video_history;not null" json:"user_id"`  // 用户ID
+	VideoID   uint           `gorm:"index:idx_user_video_history;not null" json:"video_id"` // 视频ID
+	Position  int            `gorm:"default:0" json:"position"`                             // 播放进度 (秒)
+	Duration  int            `gorm:"default:0" json:"duration"`                             // 视频总时长 (秒)
+	Finished  bool           `gorm:"index;default:false" json:"finished"`                   // 是否看完
+	DeletedAt gorm.DeletedAt `gorm:"index" json:"-"`
+
+	// 关联
+	Video *Video `gorm:"foreignKey:VideoID" json:"video,omitempty"`
+}
+
+// TableName 指定表名
+func (VideoHistory) TableName() string {
+	return "video_histories"
+}
+
+// VideoHistoryVO 视频播放历史视图对象（用于响应，携带互动状态）
+type VideoHistoryVO struct {
+	ID        uint      `json:"id"`
+	CreatedAt time.Time `json:"created_at"`
+	UpdatedAt time.Time `json:"updated_at"`
+
+	UserID   uint `json:"user_id"`
+	VideoID  uint `json:"video_id"`
+	Position int  `json:"position"`
+	Duration int  `json:"duration"`
+	Finished bool `json:"finished"`
+
+	Video *VideoVO `json:"video,omitempty"`
 }

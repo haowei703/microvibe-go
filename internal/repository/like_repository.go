@@ -21,6 +21,8 @@ type LikeRepository interface {
 	FindByUserID(ctx context.Context, userID uint, limit, offset int) ([]*model.Like, error)
 	// FindByVideoID 查找视频的点赞列表
 	FindByVideoID(ctx context.Context, videoID uint, limit, offset int) ([]*model.Like, error)
+	// CountByUserID 统计用户点赞数量
+	CountByUserID(ctx context.Context, userID uint) (int64, error)
 }
 
 // likeRepositoryImpl 点赞数据访问层实现
@@ -83,6 +85,7 @@ func (r *likeRepositoryImpl) FindByUserID(ctx context.Context, userID uint, limi
 
 	var likes []*model.Like
 	if err := r.db.WithContext(ctx).
+		Preload("Video").
 		Where("user_id = ?", userID).
 		Order("created_at DESC").
 		Limit(limit).
@@ -93,6 +96,19 @@ func (r *likeRepositoryImpl) FindByUserID(ctx context.Context, userID uint, limi
 	}
 
 	return likes, nil
+}
+
+// CountByUserID 统计用户点赞数量
+func (r *likeRepositoryImpl) CountByUserID(ctx context.Context, userID uint) (int64, error) {
+	var count int64
+	if err := r.db.WithContext(ctx).
+		Model(&model.Like{}).
+		Where("user_id = ?", userID).
+		Count(&count).Error; err != nil {
+		logger.Error("统计用户点赞数量失败", zap.Error(err), zap.Uint("user_id", userID))
+		return 0, err
+	}
+	return count, nil
 }
 
 // FindByVideoID 查找视频的点赞列表

@@ -94,17 +94,111 @@ func (e *Engineer) Extract(ctx context.Context, userID uint, videos []*model.Vid
 		features["user"] = userFeature
 	}
 
-	// 提取视频特征
-	videoFeatures := make(map[uint]*VideoFeature)
-	for _, video := range videos {
-		videoFeature, err := e.GetVideoFeature(ctx, video.ID)
+	// 批量提取视频特征，避免 N+1 查询
+	if len(videos) > 0 {
+		videoIDs := make([]uint, 0, len(videos))
+		for _, v := range videos {
+			videoIDs = append(videoIDs, v.ID)
+		}
+		videoFeatures, err := e.GetVideoFeaturesBatch(ctx, videoIDs)
 		if err == nil {
-			videoFeatures[video.ID] = videoFeature
+			features["videos"] = videoFeatures
 		}
 	}
-	features["videos"] = videoFeatures
 
 	return features, nil
+}
+
+// GetVideoFeaturesBatch 批量获取视频特征
+func (e *Engineer) GetVideoFeaturesBatch(ctx context.Context, videoIDs []uint) (map[uint]*VideoFeature, error) {
+	result := make(map[uint]*VideoFeature, len(videoIDs))
+	missing := make([]uint, 0)
+
+	// 先批量从 Redis 读取缓存
+	pipe := e.redis.Pipeline()
+	cmds := make(map[uint]*redis.StringCmd, len(videoIDs))
+	for _, id := range videoIDs {
+		cacheKey := fmt.Sprintf("video:feature:%d", id)
+		cmds[id] = pipe.Get(ctx, cacheKey)
+	}
+	pipe.Exec(ctx)
+
+	for id, cmd := range cmds {
+		if cached, err := cmd.Result(); err == nil {
+			var feature VideoFeature
+			if err := json.Unmarshal([]byte(cached), &feature); err == nil {
+				result[id] = &feature
+				continue
+			}
+		}
+		missing = append(missing, id)
+	}
+
+	if len(missing) == 0 {
+		return result, nil
+	}
+
+	// 批量查询缓存未命中的视频
+	var videos []model.Video
+	if err := e.db.WithContext(ctx).Where("id IN ?", missing).Find(&videos).Error; err != nil {
+		return result, err
+	}
+
+	// 批量查询昨日统计数据
+	yesterday := time.Now().Add(-24 * time.Hour).Format("2006-01-02")
+	var statsList []model.VideoStats
+	statsMap := make(map[uint]model.VideoStats)
+	if err := e.db.WithContext(ctx).
+		Where("video_id IN ? AND date = ?", missing, yesterday).
+		Find(&statsList).Error; err == nil {
+		for _, s := range statsList {
+			statsMap[s.VideoID] = s
+		}
+	}
+
+	// 组装特征并写入缓存
+	writePipe := e.redis.Pipeline()
+	for _, video := range videos {
+		feature := e.buildVideoFeature(&video)
+		if s, ok := statsMap[video.ID]; ok {
+			feature.FinishRate = s.FinishRate
+			feature.AvgWatchTime = s.AvgDuration
+			if s.UniqueViewCount > 0 {
+				feature.CTR = float64(s.PlayCount) / float64(s.UniqueViewCount)
+			}
+		}
+		result[video.ID] = feature
+		data, _ := json.Marshal(feature)
+		writePipe.Set(ctx, fmt.Sprintf("video:feature:%d", video.ID), data, 30*time.Minute)
+	}
+	writePipe.Exec(ctx)
+
+	return result, nil
+}
+
+// buildVideoFeature 从 model.Video 构建 VideoFeature
+func (e *Engineer) buildVideoFeature(video *model.Video) *VideoFeature {
+	feature := &VideoFeature{
+		VideoID:      video.ID,
+		Duration:     video.Duration,
+		QualityScore: video.QualityScore,
+		HotScore:     video.HotScore,
+		UpdatedAt:    time.Now(),
+	}
+	if video.CategoryID != nil {
+		feature.CategoryID = *video.CategoryID
+	}
+	if video.PublishedAt != nil {
+		feature.PublishedAt = *video.PublishedAt
+		hoursSincePublish := time.Since(*video.PublishedAt).Hours()
+		feature.FreshnessScore = 1.0 / (1.0 + hoursSincePublish/24.0)
+	}
+	if video.PlayCount > 0 {
+		feature.LikeRate = float64(video.LikeCount) / float64(video.PlayCount)
+		feature.CommentRate = float64(video.CommentCount) / float64(video.PlayCount)
+		feature.ShareRate = float64(video.ShareCount) / float64(video.PlayCount)
+	}
+	return feature
 }
 
 // GetUserFeature 获取用户特征
@@ -143,8 +237,16 @@ func (e *Engineer) calculateUserFeature(ctx context.Context, userID uint) (*User
 
 	// 获取用户基本信息
 	var user model.User
-	if err := e.db.First(&user, userID).Error; err != nil {
-		return nil, err
+	if userID > 0 {
+		if err := e.db.WithContext(ctx).First(&user, userID).Error; err != nil {
+			return nil, err
+		}
+	} else {
+		// 游客用户，提供匿名画像
+		user.ID = 0
+		user.Gender = 0
+		user.Province = "Unknown"
+		user.City = "Unknown"
 	}
 
 	feature.Gender = user.Gender
@@ -159,7 +261,7 @@ func (e *Engineer) calculateUserFeature(ctx context.Context, userID uint) (*User
 	// 获取用户行为统计
 	var behaviors []model.UserBehavior
 	thirtyDaysAgo := time.Now().Add(-30 * 24 * time.Hour)
-	if err := e.db.Where("user_id = ? AND created_at > ?", userID, thirtyDaysAgo).
+	if err := e.db.WithContext(ctx).Where("user_id = ? AND created_at > ?", userID, thirtyDaysAgo).
 		Find(&behaviors).Error; err == nil {
 
 		if len(behaviors) > 0 {
@@ -184,11 +286,12 @@ func (e *Engineer) calculateUserFeature(ctx context.Context, userID uint) (*User
 				}
 
 				// 互动率
-				if b.Action == 2 {
+				switch b.Action {
+				case 2:
 					likeCount++
-				} else if b.Action == 3 {
+				case 3:
 					commentCount++
-				} else if b.Action == 4 {
+				case 4:
 					shareCount++
 				}
 
@@ -224,7 +327,7 @@ func (e *Engineer) calculateUserFeature(ctx context.Context, userID uint) (*User
 
 	// 获取用户兴趣标签
 	var interests []model.UserInterest
-	if err := e.db.Where("user_id = ?", userID).
+	if err := e.db.WithContext(ctx).Where("user_id = ?", userID).
 		Order("score DESC").
 		Limit(10).
 		Find(&interests).Error; err == nil {
@@ -264,23 +367,28 @@ func (e *Engineer) GetVideoFeature(ctx context.Context, videoID uint) (*VideoFea
 // calculateVideoFeature 计算视频特征
 func (e *Engineer) calculateVideoFeature(ctx context.Context, videoID uint) (*VideoFeature, error) {
 	var video model.Video
-	if err := e.db.First(&video, videoID).Error; err != nil {
+	if err := e.db.WithContext(ctx).First(&video, videoID).Error; err != nil {
 		return nil, err
 	}
 
 	feature := &VideoFeature{
 		VideoID:      videoID,
-		CategoryID:   video.CategoryID,
 		Duration:     video.Duration,
 		QualityScore: video.QualityScore,
 		HotScore:     video.HotScore,
-		PublishedAt:  *video.PublishedAt,
 		UpdatedAt:    time.Now(),
 	}
 
-	// 计算新鲜度分数（越新分数越高）
-	hoursSincePublish := time.Since(*video.PublishedAt).Hours()
-	feature.FreshnessScore = 1.0 / (1.0 + hoursSincePublish/24.0) // 24小时衰减
+	if video.CategoryID != nil {
+		feature.CategoryID = *video.CategoryID
+	}
+
+	// 计算新鲜度分数（越新分数越高），PublishedAt 为 nil 时新鲜度为 0
+	if video.PublishedAt != nil {
+		feature.PublishedAt = *video.PublishedAt
+		hoursSincePublish := time.Since(*video.PublishedAt).Hours()
+		feature.FreshnessScore = 1.0 / (1.0 + hoursSincePublish/24.0) // 24小时衰减
+	}
 
 	// 计算互动率
 	if video.PlayCount > 0 {
@@ -290,14 +398,15 @@ func (e *Engineer) calculateVideoFeature(ctx context.Context, videoID uint) (*Vi
 	}
 
 	// 从统计表获取更详细的数据
-	var stats model.VideoStats
+	var stats []model.VideoStats
 	yesterday := time.Now().Add(-24 * time.Hour).Format("2006-01-02")
-	if err := e.db.Where("video_id = ? AND date = ?", videoID, yesterday).
-		First(&stats).Error; err == nil {
-		feature.FinishRate = stats.FinishRate
-		feature.AvgWatchTime = stats.AvgDuration
-		if stats.UniqueViewCount > 0 {
-			feature.CTR = float64(stats.PlayCount) / float64(stats.UniqueViewCount)
+	if err := e.db.WithContext(ctx).Where("video_id = ? AND date = ?", videoID, yesterday).
+		Limit(1).
+		Find(&stats).Error; err == nil && len(stats) > 0 {
+		feature.FinishRate = stats[0].FinishRate
+		feature.AvgWatchTime = stats[0].AvgDuration
+		if stats[0].UniqueViewCount > 0 {
+			feature.CTR = float64(stats[0].PlayCount) / float64(stats[0].UniqueViewCount)
 		}
 	}
 
@@ -306,13 +415,26 @@ func (e *Engineer) calculateVideoFeature(ctx context.Context, videoID uint) (*Vi
 
 // UpdateUserProfile 更新用户画像
 func (e *Engineer) UpdateUserProfile(ctx context.Context, userID uint, behavior *model.UserBehavior) error {
-	// 保存行为记录
-	if err := e.db.Create(behavior).Error; err != nil {
+	// 获取视频信息，检查是否是自己的视频
+	var video model.Video
+	if err := e.db.WithContext(ctx).First(&video, behavior.VideoID).Error; err != nil {
 		return err
 	}
 
+	// 自己对自己视频的行为不计入画像和行为记录（防止冷启动数据偏差和作弊）
+	if video.UserID == userID {
+		return nil
+	}
+
+	// 保存行为记录 (如果尚未保存)
+	if behavior.ID == 0 {
+		if err := e.db.Create(behavior).Error; err != nil {
+			return err
+		}
+	}
+
 	// 异步更新用户兴趣标签
-	go e.updateUserInterest(context.Background(), userID, behavior)
+	go e.updateUserInterest(context.Background(), userID, behavior, &video)
 
 	// 清除用户特征缓存
 	cacheKey := fmt.Sprintf("user:feature:%d", userID)
@@ -322,10 +444,8 @@ func (e *Engineer) UpdateUserProfile(ctx context.Context, userID uint, behavior 
 }
 
 // updateUserInterest 更新用户兴趣
-func (e *Engineer) updateUserInterest(ctx context.Context, userID uint, behavior *model.UserBehavior) {
-	// 获取视频信息
-	var video model.Video
-	if err := e.db.First(&video, behavior.VideoID).Error; err != nil {
+func (e *Engineer) updateUserInterest(ctx context.Context, userID uint, behavior *model.UserBehavior, video *model.Video) {
+	if video == nil {
 		return
 	}
 
@@ -347,15 +467,19 @@ func (e *Engineer) updateUserInterest(ctx context.Context, userID uint, behavior
 	}
 
 	// 更新用户兴趣表
+	if video.CategoryID == nil {
+		return
+	}
+
 	var interest model.UserInterest
-	err := e.db.Where("user_id = ? AND category_id = ?", userID, video.CategoryID).
+	err := e.db.WithContext(ctx).Where("user_id = ? AND category_id = ?", userID, *video.CategoryID).
 		First(&interest).Error
 
 	if pkgerrors.IsNotFound(err) {
 		// 创建新的兴趣记录
 		interest = model.UserInterest{
 			UserID:     userID,
-			CategoryID: video.CategoryID,
+			CategoryID: *video.CategoryID,
 			Score:      scoreIncrement,
 			Weight:     1.0,
 			ViewCount:  1,
@@ -363,7 +487,7 @@ func (e *Engineer) updateUserInterest(ctx context.Context, userID uint, behavior
 		if behavior.Action == 2 {
 			interest.LikeCount = 1
 		}
-		e.db.Create(&interest)
+		e.db.WithContext(ctx).Create(&interest)
 	} else if err == nil {
 		// 更新现有兴趣记录
 		interest.Score = interest.Score*0.9 + scoreIncrement // 指数衰减
@@ -374,7 +498,7 @@ func (e *Engineer) updateUserInterest(ctx context.Context, userID uint, behavior
 		if behavior.Action == 2 {
 			interest.LikeCount++
 		}
-		e.db.Save(&interest)
+		e.db.WithContext(ctx).Save(&interest)
 	}
 }
 

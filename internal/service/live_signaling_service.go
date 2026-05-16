@@ -8,8 +8,10 @@ import (
 	"sync"
 	"time"
 
+	"microvibe-go/internal/config"
 	"microvibe-go/pkg/event"
 	"microvibe-go/pkg/logger"
+	"microvibe-go/pkg/utils"
 
 	"github.com/gin-gonic/gin"
 	"github.com/gorilla/websocket"
@@ -106,10 +108,13 @@ type liveSignalingServiceImpl struct {
 
 	// eventBus 事件总线（用于发布直播事件）
 	eventBus event.EventBus
+
+	// config 配置信息
+	config *config.Config
 }
 
 // NewLiveSignalingService 创建信令服务
-func NewLiveSignalingService(liveService LiveStreamService, sfuClient SFUClientService, enableSFU bool) LiveSignalingService {
+func NewLiveSignalingService(liveService LiveStreamService, sfuClient SFUClientService, enableSFU bool, cfg *config.Config) LiveSignalingService {
 	return &liveSignalingServiceImpl{
 		rooms: make(map[string][]*Client),
 		upgrader: websocket.Upgrader{
@@ -124,6 +129,7 @@ func NewLiveSignalingService(liveService LiveStreamService, sfuClient SFUClientS
 		sfuClient:   sfuClient,
 		enableSFU:   enableSFU,
 		eventBus:    event.GetGlobalEventBus(), // 使用全局事件总线
+		config:      cfg,
 	}
 }
 
@@ -131,9 +137,26 @@ func NewLiveSignalingService(liveService LiveStreamService, sfuClient SFUClientS
 func (s *liveSignalingServiceImpl) HandleWebSocket(c *gin.Context) {
 	// 从查询参数获取用户信息
 	roomID := c.Query("room_id")
-	userIDStr := c.Query("user_id")
+	token := c.Query("token")
+	userIDStr := c.Query("user_id") // 兼容模式，优先使用 token
 	username := c.Query("username")
 	roleStr := c.Query("role") // publisher 或 subscriber
+
+	// 鉴权逻辑：优先尝试 token 鉴权
+	var userID uint
+	if token != "" {
+		if claims, err := utils.ParseToken(token, s.config.JWT.Secret); err == nil {
+			userID = claims.UserID
+			username = claims.Username
+		}
+	}
+
+	// 如果 token 鉴权失败且提供了 user_id (兼容原有逻辑)
+	if userID == 0 && userIDStr != "" {
+		var id uint64
+		_, _ = fmt.Sscanf(userIDStr, "%d", &id)
+		userID = uint(id)
+	}
 
 	if roomID == "" {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "room_id is required"})
@@ -145,15 +168,6 @@ func (s *liveSignalingServiceImpl) HandleWebSocket(c *gin.Context) {
 	if err != nil {
 		logger.Error("WebSocket 升级失败", zap.Error(err))
 		return
-	}
-
-	// 创建客户端对象
-	var userID uint
-	if userIDStr != "" {
-		// 简单的字符串转 uint（生产环境应该使用更安全的方式）
-		var id uint64
-		_, _ = fmt.Sscanf(userIDStr, "%d", &id)
-		userID = uint(id)
 	}
 
 	// 解析角色

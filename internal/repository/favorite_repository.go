@@ -19,6 +19,10 @@ type FavoriteRepository interface {
 	Exists(ctx context.Context, userID, videoID uint) (bool, error)
 	// FindByUserID 查找用户的收藏列表
 	FindByUserID(ctx context.Context, userID uint, limit, offset int) ([]*model.Favorite, error)
+	// CountByUserID 统计用户收藏数量
+	CountByUserID(ctx context.Context, userID uint) (int64, error)
+	// FindByVideoID 查找视频的收藏列表
+	FindByVideoID(ctx context.Context, videoID uint, limit, offset int) ([]*model.Favorite, error)
 }
 
 // favoriteRepositoryImpl 收藏数据访问层实现
@@ -88,6 +92,38 @@ func (r *favoriteRepositoryImpl) FindByUserID(ctx context.Context, userID uint, 
 		Offset(offset).
 		Find(&favorites).Error; err != nil {
 		logger.Error("查找用户收藏列表失败", zap.Error(err))
+		return nil, err
+	}
+
+	return favorites, nil
+}
+
+// CountByUserID 统计用户收藏数量
+func (r *favoriteRepositoryImpl) CountByUserID(ctx context.Context, userID uint) (int64, error) {
+	var count int64
+	if err := r.db.WithContext(ctx).
+		Model(&model.Favorite{}).
+		Where("user_id = ?", userID).
+		Count(&count).Error; err != nil {
+		logger.Error("统计用户收藏数量失败", zap.Error(err), zap.Uint("user_id", userID))
+		return 0, err
+	}
+	return count, nil
+}
+
+// FindByVideoID 查找视频的收藏列表
+func (r *favoriteRepositoryImpl) FindByVideoID(ctx context.Context, videoID uint, limit, offset int) ([]*model.Favorite, error) {
+	logger.Debug("查找视频收藏列表", zap.Uint("video_id", videoID))
+
+	var favorites []*model.Favorite
+	if err := r.db.WithContext(ctx).
+		Preload("User").
+		Where("video_id = ?", videoID).
+		Order("created_at DESC").
+		Limit(limit).
+		Offset(offset).
+		Find(&favorites).Error; err != nil {
+		logger.Error("查找视频收藏列表失败", zap.Error(err))
 		return nil, err
 	}
 

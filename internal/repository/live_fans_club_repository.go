@@ -71,7 +71,7 @@ func (r *liveFansClubRepositoryImpl) Update(ctx context.Context, member *model.L
 
 // FindByID 根据ID查询（使用Redis缓存）
 func (r *liveFansClubRepositoryImpl) FindByID(ctx context.Context, id uint) (*model.LiveFansClub, error) {
-	return cache.WithCache[*model.LiveFansClub](
+	return cache.WithCache(
 		cache.CacheConfig{
 			CacheName: "livefans",
 			KeyPrefix: "live:fans:id",
@@ -91,7 +91,7 @@ func (r *liveFansClubRepositoryImpl) FindByID(ctx context.Context, id uint) (*mo
 func (r *liveFansClubRepositoryImpl) FindByLiveAndUser(ctx context.Context, liveID, userID uint) (*model.LiveFansClub, error) {
 	cacheKey := fmt.Sprintf("%d:%d", liveID, userID)
 
-	return cache.WithCache[*model.LiveFansClub](
+	return cache.WithCache(
 		cache.CacheConfig{
 			CacheName: "livefans",
 			KeyPrefix: "live:fans:lu",
@@ -193,7 +193,7 @@ func (r *liveFansClubRepositoryImpl) UpdateLevel(ctx context.Context, id uint, l
 
 // GetTopMembers 获取粉丝团排行榜（使用Redis缓存）
 func (r *liveFansClubRepositoryImpl) GetTopMembers(ctx context.Context, liveID uint, limit int) ([]*model.LiveFansClub, error) {
-	return cache.WithCache[[]*model.LiveFansClub](
+	return cache.WithCache(
 		cache.CacheConfig{
 			CacheName: "livefans",
 			KeyPrefix: "live:fans:top",

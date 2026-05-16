@@ -4,6 +4,7 @@ import (
 	"strconv"
 
 	"microvibe-go/internal/config"
+	"microvibe-go/internal/middleware"
 	"microvibe-go/internal/service"
 	"microvibe-go/pkg/response"
 
@@ -34,7 +35,7 @@ func NewLiveStreamHandler(liveService service.LiveStreamService, cfg *config.Con
 // @Router /api/v1/live/create [post]
 func (h *LiveStreamHandler) CreateLiveStream(c *gin.Context) {
 	// 获取当前用户ID
-	userID, exists := c.Get("uid")
+	userID, exists := middleware.GetUserID(c)
 	if !exists {
 		response.Unauthorized(c, "未登录")
 		return
@@ -48,7 +49,7 @@ func (h *LiveStreamHandler) CreateLiveStream(c *gin.Context) {
 	}
 
 	// 调用服务创建直播间
-	liveStream, err := h.liveService.CreateLiveStream(c.Request.Context(), userID.(uint), &req)
+	liveStream, err := h.liveService.CreateLiveStream(c.Request.Context(), userID, &req)
 	if err != nil {
 		response.Error(c, response.CodeError, err.Error())
 		return
@@ -67,7 +68,7 @@ func (h *LiveStreamHandler) CreateLiveStream(c *gin.Context) {
 // @Router /api/v1/live/start [post]
 func (h *LiveStreamHandler) StartLiveStream(c *gin.Context) {
 	// 获取当前用户ID
-	userID, exists := c.Get("uid")
+	userID, exists := middleware.GetUserID(c)
 	if !exists {
 		response.Unauthorized(c, "未登录")
 		return
@@ -81,7 +82,7 @@ func (h *LiveStreamHandler) StartLiveStream(c *gin.Context) {
 	}
 
 	// 调用服务开始直播
-	if err := h.liveService.StartLiveStream(c.Request.Context(), userID.(uint), req.StreamKey); err != nil {
+	if err := h.liveService.StartLiveStream(c.Request.Context(), userID, req.StreamKey); err != nil {
 		response.Error(c, response.CodeError, err.Error())
 		return
 	}
@@ -99,7 +100,7 @@ func (h *LiveStreamHandler) StartLiveStream(c *gin.Context) {
 // @Router /api/v1/live/end [post]
 func (h *LiveStreamHandler) EndLiveStream(c *gin.Context) {
 	// 获取当前用户ID
-	userID, exists := c.Get("uid")
+	userID, exists := middleware.GetUserID(c)
 	if !exists {
 		response.Unauthorized(c, "未登录")
 		return
@@ -113,7 +114,7 @@ func (h *LiveStreamHandler) EndLiveStream(c *gin.Context) {
 	}
 
 	// 调用服务结束直播
-	if err := h.liveService.EndLiveStream(c.Request.Context(), userID.(uint), req.StreamKey); err != nil {
+	if err := h.liveService.EndLiveStream(c.Request.Context(), userID, req.StreamKey); err != nil {
 		response.Error(c, response.CodeError, err.Error())
 		return
 	}
@@ -180,14 +181,14 @@ func (h *LiveStreamHandler) GetLiveStreamByRoomID(c *gin.Context) {
 // @Router /api/v1/live/my [get]
 func (h *LiveStreamHandler) GetMyLiveStream(c *gin.Context) {
 	// 获取当前用户ID
-	userID, exists := c.Get("uid")
+	userID, exists := middleware.GetUserID(c)
 	if !exists {
 		response.Unauthorized(c, "未登录")
 		return
 	}
 
 	// 调用服务查询直播间
-	liveStream, err := h.liveService.GetMyLiveStream(c.Request.Context(), userID.(uint))
+	liveStream, err := h.liveService.GetMyLiveStream(c.Request.Context(), userID)
 	if err != nil {
 		response.NotFound(c, err.Error())
 		return
@@ -238,8 +239,8 @@ func (h *LiveStreamHandler) JoinLiveStream(c *gin.Context) {
 
 	// 获取当前用户ID（可选，用于统计）
 	var userID uint = 0
-	if uid, exists := c.Get("uid"); exists {
-		userID = uid.(uint)
+	if uid, exists := middleware.GetUserID(c); exists {
+		userID = uid
 	}
 
 	// 调用服务加入直播间
@@ -315,7 +316,7 @@ func (h *LiveStreamHandler) IncrementLike(c *gin.Context) {
 // @Router /api/v1/live/{id} [delete]
 func (h *LiveStreamHandler) DeleteLiveStream(c *gin.Context) {
 	// 获取当前用户ID
-	userID, exists := c.Get("uid")
+	userID, exists := middleware.GetUserID(c)
 	if !exists {
 		response.Unauthorized(c, "未登录")
 		return
@@ -330,7 +331,7 @@ func (h *LiveStreamHandler) DeleteLiveStream(c *gin.Context) {
 	}
 
 	// 调用服务删除直播间
-	if err := h.liveService.DeleteLiveStream(c.Request.Context(), userID.(uint), uint(id)); err != nil {
+	if err := h.liveService.DeleteLiveStream(c.Request.Context(), userID, uint(id)); err != nil {
 		response.Error(c, response.CodeError, err.Error())
 		return
 	}
@@ -348,7 +349,7 @@ func (h *LiveStreamHandler) DeleteLiveStream(c *gin.Context) {
 // @Router /api/v1/live/ban [post]
 func (h *LiveStreamHandler) BanUser(c *gin.Context) {
 	// 获取当前用户ID（操作者）
-	userID, exists := c.Get("uid")
+	userID, exists := middleware.GetUserID(c)
 	if !exists {
 		response.Unauthorized(c, "未登录")
 		return
@@ -360,7 +361,7 @@ func (h *LiveStreamHandler) BanUser(c *gin.Context) {
 		return
 	}
 
-	if err := h.liveService.BanUser(c.Request.Context(), userID.(uint), &req); err != nil {
+	if err := h.liveService.BanUser(c.Request.Context(), userID, &req); err != nil {
 		response.Error(c, response.CodeError, err.Error())
 		return
 	}
@@ -378,7 +379,7 @@ func (h *LiveStreamHandler) BanUser(c *gin.Context) {
 // @Router /api/v1/live/unban [post]
 func (h *LiveStreamHandler) UnbanUser(c *gin.Context) {
 	// 获取当前用户ID（操作者）
-	userID, exists := c.Get("uid")
+	userID, exists := middleware.GetUserID(c)
 	if !exists {
 		response.Unauthorized(c, "未登录")
 		return
@@ -399,7 +400,7 @@ func (h *LiveStreamHandler) UnbanUser(c *gin.Context) {
 		return
 	}
 
-	if err := h.liveService.UnbanUser(c.Request.Context(), userID.(uint), uint(liveID), uint(targetUserID)); err != nil {
+	if err := h.liveService.UnbanUser(c.Request.Context(), userID, uint(liveID), uint(targetUserID)); err != nil {
 		response.Error(c, response.CodeError, err.Error())
 		return
 	}
@@ -435,12 +436,12 @@ func (h *LiveStreamHandler) CheckBanned(c *gin.Context) {
 		userID = uint(uid)
 	} else {
 		// 获取当前登录用户ID
-		uid, exists := c.Get("uid")
+		uid, exists := middleware.GetUserID(c)
 		if !exists {
 			response.Unauthorized(c, "未登录")
 			return
 		}
-		userID = uid.(uint)
+		userID = uid
 	}
 
 	isBanned, err := h.liveService.CheckBanned(c.Request.Context(), uint(liveID), userID)

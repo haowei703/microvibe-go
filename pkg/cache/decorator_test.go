@@ -36,7 +36,7 @@ func NewUserRepository() *UserRepository {
 
 // FindByID 使用WithCache装饰器查询用户
 func (r *UserRepository) FindByID(ctx context.Context, id uint) (*User, error) {
-	return cache.WithCache[*User](
+	return cache.WithCache(
 		cache.CacheConfig{
 			CacheName: "user",
 			KeyPrefix: "user:id",
@@ -55,7 +55,7 @@ func (r *UserRepository) FindByID(ctx context.Context, id uint) (*User, error) {
 
 // FindByUsername 使用WithCache装饰器查询用户名
 func (r *UserRepository) FindByUsername(ctx context.Context, username string) (*User, error) {
-	return cache.WithCache[*User](
+	return cache.WithCache(
 		cache.CacheConfig{
 			CacheName: "user",
 			KeyPrefix: "user:username",

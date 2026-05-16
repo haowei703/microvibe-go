@@ -272,7 +272,7 @@ func (b *Builder[T]) WithLogging() *Builder[T] {
 // WithMetrics 添加监控装饰器（快捷方法）
 func (b *Builder[T]) WithMetrics(namespace string) *Builder[T] {
 	return b.WithDecorator(func(cache Cache[T]) Cache[T] {
-		return NewMetricsDecorator[T](cache, namespace)
+		return NewMetricsDecorator(cache, namespace)
 	})
 }
 

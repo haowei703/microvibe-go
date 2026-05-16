@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"microvibe-go/internal/middleware"
 	"microvibe-go/internal/service"
 	"microvibe-go/pkg/response"
 	"strconv"
@@ -11,12 +12,14 @@ import (
 // HashtagHandler 话题处理器
 type HashtagHandler struct {
 	hashtagService service.HashtagService
+	videoService   service.VideoService
 }
 
 // NewHashtagHandler 创建话题处理器实例
-func NewHashtagHandler(hashtagService service.HashtagService) *HashtagHandler {
+func NewHashtagHandler(hashtagService service.HashtagService, videoService service.VideoService) *HashtagHandler {
 	return &HashtagHandler{
 		hashtagService: hashtagService,
+		videoService:   videoService,
 	}
 }
 
@@ -96,5 +99,13 @@ func (h *HashtagHandler) GetHashtagVideos(c *gin.Context) {
 		return
 	}
 
-	response.PageSuccess(c, videos, total, page, pageSize)
+	// 丰富视频信息（点赞、收藏、关注状态）
+	currentUserID, _ := middleware.GetUserID(c)
+	enrichedVideos, err := h.videoService.EnrichVideoList(c.Request.Context(), currentUserID, videos)
+	if err != nil {
+		response.ServerError(c, "处理视频信息失败: "+err.Error())
+		return
+	}
+
+	response.PageSuccess(c, enrichedVideos, total, page, pageSize)
 }

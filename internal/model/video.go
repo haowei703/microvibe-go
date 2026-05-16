@@ -25,7 +25,7 @@ type Video struct {
 	FileSize    int64  `gorm:"default:0" json:"file_size"`         // 文件大小（字节）
 
 	// 分类和标签
-	CategoryID uint   `gorm:"index" json:"category_id"` // 分类ID
+	CategoryID *uint  `gorm:"index" json:"category_id"` // 分类ID
 	Tags       string `gorm:"size:500" json:"tags"`     // 标签（逗号分隔）
 
 	// 统计信息
@@ -43,6 +43,7 @@ type Video struct {
 	Status       int8       `gorm:"default:0;index" json:"status"`     // 状态：0-审核中，1-已发布，2-不通过，3-下架
 	IsPublic     bool       `gorm:"default:true" json:"is_public"`     // 是否公开
 	AllowComment bool       `gorm:"default:true" json:"allow_comment"` // 是否允许评论
+	IsTop        bool       `gorm:"default:false;index" json:"is_top"` // 是否置顶
 	PublishedAt  *time.Time `gorm:"index" json:"published_at"`         // 发布时间
 
 	// 关联
@@ -103,4 +104,21 @@ type VideoHashtag struct {
 // TableName 指定表名
 func (VideoHashtag) TableName() string {
 	return "video_hashtags"
+}
+
+// VideoVO 视频信息视图对象
+type VideoVO struct {
+	*Video
+	User        *AuthorVO `json:"user,omitempty"` // 作者信息
+	IsLiked     bool      `json:"is_liked"`       // 是否已点赞
+	IsFavorited bool      `json:"is_favorited"`   // 是否已收藏
+	IsFollowed  bool      `json:"is_followed"`    // 是否已关注作者
+}
+
+// MyVideoVO 用户自己查看作品时的视图对象
+type MyVideoVO struct {
+	*Video
+	IsLiked     bool   `json:"is_liked"`
+	IsFavorited bool   `json:"is_favorited"`
+	StatusMsg   string `json:"status_msg"` // 状态描述
 }

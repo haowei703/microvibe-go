@@ -72,6 +72,7 @@ func (h *SearchHandler) SearchVideos(c *gin.Context) {
 		return
 	}
 
+	// 获取分页参数
 	page, _ := strconv.Atoi(c.DefaultQuery("page", "1"))
 	pageSize, _ := strconv.Atoi(c.DefaultQuery("page_size", "20"))
 
@@ -82,7 +83,10 @@ func (h *SearchHandler) SearchVideos(c *gin.Context) {
 		pageSize = 20
 	}
 
-	videos, total, err := h.searchService.SearchVideos(c.Request.Context(), keyword, page, pageSize)
+	// 获取用户ID（可选）
+	userID, _ := middleware.GetUserID(c)
+
+	videos, total, err := h.searchService.SearchVideos(c.Request.Context(), keyword, userID, page, pageSize)
 	if err != nil {
 		response.Error(c, response.CodeError, err.Error())
 		return
@@ -94,10 +98,8 @@ func (h *SearchHandler) SearchVideos(c *gin.Context) {
 // SearchUsers 搜索用户
 func (h *SearchHandler) SearchUsers(c *gin.Context) {
 	keyword := c.Query("keyword")
-	if keyword == "" {
-		response.InvalidParam(c, "搜索关键词不能为空")
-		return
-	}
+	// 获取用户ID（可选）
+	userID, _ := middleware.GetUserID(c)
 
 	page, _ := strconv.Atoi(c.DefaultQuery("page", "1"))
 	pageSize, _ := strconv.Atoi(c.DefaultQuery("page_size", "20"))
@@ -109,7 +111,7 @@ func (h *SearchHandler) SearchUsers(c *gin.Context) {
 		pageSize = 20
 	}
 
-	users, total, err := h.searchService.SearchUsers(c.Request.Context(), keyword, page, pageSize)
+	users, total, err := h.searchService.SearchUsers(c.Request.Context(), keyword, userID, page, pageSize)
 	if err != nil {
 		response.Error(c, response.CodeError, err.Error())
 		return

@@ -1,7 +1,7 @@
 # MicroVibe 本地开发 Caddy 配置
-# 同时代理前端（localhost:3000）和后端（localhost:8080）
+# 同时代理前端（localhost:52441）和后端（localhost:8080）
 
-http://localhost:8888 {
+http://localhost:52441 {
     # 日志配置
     log {
         output file /tmp/caddy-microvibe.log

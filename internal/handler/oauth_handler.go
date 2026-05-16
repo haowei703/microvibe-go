@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/rand"
 	"encoding/base64"
+	"fmt"
 	"net/http"
 	"strings"
 
@@ -13,6 +14,7 @@ import (
 	"golang.org/x/oauth2"
 
 	"microvibe-go/internal/config"
+	"microvibe-go/internal/middleware"
 	"microvibe-go/internal/model"
 	"microvibe-go/internal/service"
 	"microvibe-go/pkg/logger"
@@ -86,6 +88,34 @@ func (h *OAuthHandler) Login(c *gin.Context) {
 	// 保存 state 到 cookie (10 分钟有效)
 	c.SetCookie("oauth_state", state, 600, "/", "", false, true)
 
+	// 获取平台信息，优先从 URL 参数获取 (支持系统浏览器打开时传递平台信息)
+	// 其次从 User-Agent 解析 (用于支持系统浏览器唤起应用)
+	platform := c.Query("platform")
+	if platform == "" {
+		ua := c.GetHeader("User-Agent")
+		platform = strings.ToLower(ua)
+		if strings.Contains(platform, "android") {
+			platform = "android"
+		} else if strings.Contains(platform, "iphone") || strings.Contains(platform, "ipad") {
+			platform = "ios"
+		} else if strings.Contains(platform, "windows") {
+			platform = "windows"
+		} else if strings.Contains(platform, "macintosh") {
+			platform = "macos"
+		} else if strings.Contains(platform, "linux") {
+			platform = "linux"
+		} else {
+			device := middleware.GetDeviceInfo(c)
+			platform = device.Platform
+		}
+	}
+	c.SetCookie("oauth_platform", platform, 600, "/", "", false, true)
+
+	// 保存前端回调地址（动态端口支持）
+	if frontendURL := c.Query("frontend_url"); frontendURL != "" {
+		c.SetCookie("oauth_frontend_url", frontendURL, 600, "/", "", false, true)
+	}
+
 	// 生成授权 URL 并重定向
 	url := h.oauth2Config.AuthCodeURL(state)
 	logger.Info("Redirecting to OAuth provider", zap.String("url", url))
@@ -106,36 +136,61 @@ func (h *OAuthHandler) Login(c *gin.Context) {
 // @Failure 500 {object} response.Response
 // @Router /oauth/callback [get]
 func (h *OAuthHandler) Callback(c *gin.Context) {
-	// 1. 验证 state
-	savedState, err := c.Cookie("oauth_state")
-	if err != nil || savedState == "" {
-		logger.Warn("Missing oauth_state cookie")
-		response.Error(c, response.CodeUnauthorized, "无效的登录请求")
-		return
-	}
-
-	if c.Query("state") != savedState {
-		logger.Warn("State mismatch",
-			zap.String("expected", savedState),
-			zap.String("got", c.Query("state")))
-		response.Error(c, response.CodeUnauthorized, "无效的 state 参数")
-		return
-	}
-
-	// 清除 state cookie
-	c.SetCookie("oauth_state", "", -1, "/", "", false, true)
-
-	// 2. 交换授权码获取 Token
 	code := c.Query("code")
 	if code == "" {
-		response.Error(c, response.CodeInvalidParam, "缺少授权码")
+		response.Error(c, response.CodeInvalidParam, "缺少授权码 (code)")
 		return
 	}
 
-	oauth2Token, err := h.oauth2Config.Exchange(c.Request.Context(), code)
+	// 1. 验证 state
+	// 尝试从 cookie 获取状态码（原网页/Web 前端跳转流程）
+	savedState, _ := c.Cookie("oauth_state")
+	if savedState != "" {
+		if c.Query("state") != savedState {
+			logger.Warn("State mismatch",
+				zap.String("expected", savedState),
+				zap.String("got", c.Query("state")))
+			response.Error(c, response.CodeUnauthorized, "无效的 state 参数")
+			return
+		}
+		// 校验通过后清除 cookie
+		c.SetCookie("oauth_state", "", -1, "/", "", false, true)
+	}
+
+	// 获取平台信息 (用于决定返回 JSON 还是重定向)
+	platform, _ := c.Cookie("oauth_platform")
+	if platform == "" {
+		// 如果没有 cookie，从 User-Agent 实时分析
+		device := middleware.GetDeviceInfo(c)
+		platform = device.Platform
+	}
+	// 清除平台 cookie
+	c.SetCookie("oauth_platform", "", -1, "/", "", false, true)
+
+	// 2. 交换 Token
+	// 允许客户端通过 query 传入 redirect_uri (必须与获取 code 时使用的一致)
+	// 如果不传，则使用配置中的默认值
+	redirectURI := c.Query("redirect_uri")
+	if redirectURI == "" {
+		redirectURI = h.config.OAuth.Authentik.RedirectURL
+	}
+
+	// 为本次交换创建临时的 config (如果 redirect_uri 不同)
+	tc := h.oauth2Config
+	if redirectURI != h.oauth2Config.RedirectURL {
+		tc = &oauth2.Config{
+			ClientID:     h.oauth2Config.ClientID,
+			ClientSecret: h.oauth2Config.ClientSecret,
+			RedirectURL:  redirectURI,
+			Endpoint:     h.oauth2Config.Endpoint,
+			Scopes:       h.oauth2Config.Scopes,
+		}
+	}
+
+	oauth2Token, err := tc.Exchange(c.Request.Context(), code)
 	if err != nil {
 		logger.Error("Failed to exchange token", zap.Error(err))
-		response.Error(c, response.CodeError, "Token 交换失败")
+		response.Error(c, response.CodeUnauthorized, "授权码无效或已过期")
 		return
 	}
 
@@ -183,14 +238,43 @@ func (h *OAuthHandler) Callback(c *gin.Context) {
 	}
 
 	// 6. 生成 JWT Token
-	token, err := utils.GenerateToken(user.ID, user.Username, h.config.JWT.Secret, h.config.JWT.Expire)
+	token, err := utils.GenerateToken(user.ID, user.Username, user.Role, h.config.JWT.Secret, h.config.JWT.Expire)
 	if err != nil {
 		logger.Error("Failed to generate JWT token", zap.Error(err))
 		response.Error(c, response.CodeError, "生成 Token 失败")
 		return
 	}
 
-	// 7. 返回结果（前端将保存到 localStorage）
+	// 7. 返回结果
+	// 如果是原生平台 (Mobile/Desktop)，重定向到自定义协议以支持客户端 Deep Link 唤回
+	// 注意：如果客户端明确通过 AJAX (X-Requested-With) 调用，则跳过重定向返回 JSON
+	device := middleware.DeviceInfo{Platform: platform}
+	isAjax := c.GetHeader("X-Requested-With") == "XMLHttpRequest"
+
+	if device.IsNative() && !isAjax {
+		// 生成深层链接 URL: microvibe://auth?token=xxx&user_id=xxx
+		deepLink := fmt.Sprintf("microvibe://auth/callback?token=%s&user_id=%d", token, user.ID)
+		logger.Info("Redirecting native user to deep link", zap.String("url", deepLink))
+		c.Redirect(http.StatusTemporaryRedirect, deepLink)
+		return
+	}
+
+	// 如果是 Web 端且配置了前端 URL (且不是 AJAX 请求)，重定向回前端
+	// 优先使用 cookie 中的前端地址（支持动态端口），其次使用配置
+	frontendURL := h.config.OAuth.Authentik.FrontendURL
+	if cookieURL, err := c.Cookie("oauth_frontend_url"); err == nil && cookieURL != "" {
+		frontendURL = cookieURL
+	}
+	if platform == "web" && !isAjax && frontendURL != "" {
+		redirectURL := fmt.Sprintf("%s?token=%s&user_id=%d",
+			strings.TrimSuffix(frontendURL, "/"),
+			token, user.ID)
+		logger.Info("Redirecting web user to frontend", zap.String("url", redirectURL))
+		c.Redirect(http.StatusTemporaryRedirect, redirectURL)
+		return
+	}
+
+	// 否则直接返回 JSON (适用于现代客户端自主换取 Token 的场景)
 	response.Success(c, gin.H{
 		"token": token,
 		"user": gin.H{

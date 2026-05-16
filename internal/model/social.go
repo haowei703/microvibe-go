@@ -20,12 +20,16 @@ type Comment struct {
 	RootID        *uint  `gorm:"index" json:"root_id"`              // 根评论ID（一级评论）
 	ReplyToUserID *uint  `gorm:"index" json:"reply_to_user_id"`     // 回复的用户ID
 
+	// @提及关系
+	Mentions []*User `gorm:"-" json:"mentions,omitempty"`
+
 	// 统计
 	LikeCount  int64 `gorm:"default:0" json:"like_count"`  // 点赞数
 	ReplyCount int64 `gorm:"default:0" json:"reply_count"` // 回复数
 
 	// 状态
-	Status int8 `gorm:"default:1;index" json:"status"` // 状态：0-已删除，1-正常，2-审核中，3-违规
+	Status   int8 `gorm:"default:1;index" json:"status"`        // 状态：0-已删除，1-正常，2-审核中，3-违规
+	IsPinned bool `gorm:"default:false;index" json:"is_pinned"` // 是否置顶
 
 	// 关联
 	User        *User  `gorm:"foreignKey:UserID" json:"user,omitempty"`
@@ -49,6 +53,10 @@ type Like struct {
 
 	// 组合唯一索引
 	// gorm:"uniqueIndex:idx_user_video"
+
+	// 关联
+	User  *User  `gorm:"foreignKey:UserID" json:"user,omitempty"`
+	Video *Video `gorm:"foreignKey:VideoID" json:"video,omitempty"`
 }
 
 // TableName 指定表名
@@ -72,6 +80,24 @@ type CommentLike struct {
 // TableName 指定表名
 func (CommentLike) TableName() string {
 	return "comment_likes"
+}
+
+// CommentMention 评论提及关系
+type CommentMention struct {
+	ID        uint      `gorm:"primarykey" json:"id"`
+	CreatedAt time.Time `json:"created_at"`
+
+	CommentID uint `gorm:"index;not null" json:"comment_id"` // 评论ID
+	UserID    uint `gorm:"index;not null" json:"user_id"`    // 被提及用户ID
+
+	// 关联
+	Comment *Comment `gorm:"foreignKey:CommentID" json:"-"`
+	User    *User    `gorm:"foreignKey:UserID" json:"user,omitempty"`
+}
+
+// TableName 指定表名
+func (CommentMention) TableName() string {
+	return "comment_mentions"
 }
 
 // Favorite 收藏模型
@@ -144,4 +170,23 @@ type Share struct {
 // TableName 指定表名
 func (Share) TableName() string {
 	return "shares"
+}
+
+// UserVisitor 用户访客记录
+type UserVisitor struct {
+	ID        uint      `gorm:"primarykey" json:"id"`
+	CreatedAt time.Time `json:"created_at"`
+	UpdatedAt time.Time `json:"updated_at"`
+
+	OwnerID   uint `gorm:"uniqueIndex:idx_owner_visitor;index;not null" json:"owner_id"`   // 被访问者ID
+	VisitorID uint `gorm:"uniqueIndex:idx_owner_visitor;index;not null" json:"visitor_id"` // 访问者ID
+
+	// 关联
+	Owner   *User `gorm:"foreignKey:OwnerID" json:"owner,omitempty"`
+	Visitor *User `gorm:"foreignKey:VisitorID" json:"visitor,omitempty"`
+}
+
+// TableName 指定表名
+func (UserVisitor) TableName() string {
+	return "user_visitors"
 }

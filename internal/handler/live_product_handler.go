@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"microvibe-go/internal/middleware"
 	"microvibe-go/internal/service"
 	"microvibe-go/pkg/response"
 	"strconv"
@@ -29,7 +30,7 @@ func NewLiveProductHandler(productService service.LiveProductService) *LiveProdu
 // @Router /api/v1/live/products [post]
 func (h *LiveProductHandler) AddProduct(c *gin.Context) {
 	// 获取当前登录用户ID
-	userID, exists := c.Get("uid")
+	userID, exists := middleware.GetUserID(c)
 	if !exists {
 		response.Unauthorized(c, "未登录")
 		return
@@ -41,7 +42,7 @@ func (h *LiveProductHandler) AddProduct(c *gin.Context) {
 		return
 	}
 
-	product, err := h.productService.AddProduct(c.Request.Context(), userID.(uint), &req)
+	product, err := h.productService.AddProduct(c.Request.Context(), userID, &req)
 	if err != nil {
 		response.Error(c, response.CodeError, err.Error())
 		return
@@ -60,7 +61,7 @@ func (h *LiveProductHandler) AddProduct(c *gin.Context) {
 // @Router /api/v1/live/products/:id [put]
 func (h *LiveProductHandler) UpdateProduct(c *gin.Context) {
 	// 获取当前登录用户ID
-	userID, exists := c.Get("uid")
+	userID, exists := middleware.GetUserID(c)
 	if !exists {
 		response.Unauthorized(c, "未登录")
 		return
@@ -79,7 +80,7 @@ func (h *LiveProductHandler) UpdateProduct(c *gin.Context) {
 		return
 	}
 
-	if err := h.productService.UpdateProduct(c.Request.Context(), userID.(uint), uint(id), &req); err != nil {
+	if err := h.productService.UpdateProduct(c.Request.Context(), userID, uint(id), &req); err != nil {
 		response.Error(c, response.CodeError, err.Error())
 		return
 	}
@@ -95,7 +96,7 @@ func (h *LiveProductHandler) UpdateProduct(c *gin.Context) {
 // @Router /api/v1/live/products/:id [delete]
 func (h *LiveProductHandler) DeleteProduct(c *gin.Context) {
 	// 获取当前登录用户ID
-	userID, exists := c.Get("uid")
+	userID, exists := middleware.GetUserID(c)
 	if !exists {
 		response.Unauthorized(c, "未登录")
 		return
@@ -108,7 +109,7 @@ func (h *LiveProductHandler) DeleteProduct(c *gin.Context) {
 		return
 	}
 
-	if err := h.productService.DeleteProduct(c.Request.Context(), userID.(uint), uint(id)); err != nil {
+	if err := h.productService.DeleteProduct(c.Request.Context(), userID, uint(id)); err != nil {
 		response.Error(c, response.CodeError, err.Error())
 		return
 	}
@@ -203,7 +204,7 @@ func (h *LiveProductHandler) GetHotProducts(c *gin.Context) {
 // @Router /api/v1/live/products/:id/explain [post]
 func (h *LiveProductHandler) ExplainProduct(c *gin.Context) {
 	// 获取当前登录用户ID
-	userID, exists := c.Get("uid")
+	userID, exists := middleware.GetUserID(c)
 	if !exists {
 		response.Unauthorized(c, "未登录")
 		return
@@ -216,7 +217,7 @@ func (h *LiveProductHandler) ExplainProduct(c *gin.Context) {
 		return
 	}
 
-	if err := h.productService.ExplainProduct(c.Request.Context(), userID.(uint), uint(id)); err != nil {
+	if err := h.productService.ExplainProduct(c.Request.Context(), userID, uint(id)); err != nil {
 		response.Error(c, response.CodeError, err.Error())
 		return
 	}
@@ -233,7 +234,7 @@ func (h *LiveProductHandler) ExplainProduct(c *gin.Context) {
 // @Router /api/v1/live/products/:id/stock [put]
 func (h *LiveProductHandler) UpdateStock(c *gin.Context) {
 	// 获取当前登录用户ID
-	userID, exists := c.Get("uid")
+	userID, exists := middleware.GetUserID(c)
 	if !exists {
 		response.Unauthorized(c, "未登录")
 		return
@@ -253,7 +254,7 @@ func (h *LiveProductHandler) UpdateStock(c *gin.Context) {
 		return
 	}
 
-	if err := h.productService.UpdateStock(c.Request.Context(), userID.(uint), uint(id), quantity); err != nil {
+	if err := h.productService.UpdateStock(c.Request.Context(), userID, uint(id), quantity); err != nil {
 		response.Error(c, response.CodeError, err.Error())
 		return
 	}

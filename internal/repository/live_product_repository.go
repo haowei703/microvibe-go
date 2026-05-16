@@ -70,7 +70,7 @@ func (r *liveProductRepositoryImpl) Update(ctx context.Context, product *model.L
 
 // FindByID 根据ID查询商品（使用Redis缓存）
 func (r *liveProductRepositoryImpl) FindByID(ctx context.Context, id uint) (*model.LiveProduct, error) {
-	return cache.WithCache[*model.LiveProduct](
+	return cache.WithCache(
 		cache.CacheConfig{
 			CacheName: "liveproduct",
 			KeyPrefix: "live:product:id",
@@ -90,7 +90,7 @@ func (r *liveProductRepositoryImpl) FindByID(ctx context.Context, id uint) (*mod
 func (r *liveProductRepositoryImpl) ListByLiveID(ctx context.Context, liveID uint, status int8) ([]*model.LiveProduct, error) {
 	cacheKey := fmt.Sprintf("live:%d:status:%d", liveID, status)
 
-	return cache.WithCache[[]*model.LiveProduct](
+	return cache.WithCache(
 		cache.CacheConfig{
 			CacheName: "liveproduct",
 			KeyPrefix: "live:product:list",
