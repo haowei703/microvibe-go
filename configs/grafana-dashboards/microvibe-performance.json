@@ -1,0 +1,161 @@
+{
+  "title": "MicroVibe 性能监控",
+  "uid": "microvibe-performance",
+  "version": 1,
+  "timezone": "browser",
+  "editable": true,
+  "tags": ["microvibe", "performance"],
+  "refresh": "5s",
+  "panels": [
+    {
+      "title": "QPS - 每秒请求数",
+      "type": "graph",
+      "gridPos": {"x": 0, "y": 0, "w": 12, "h": 8},
+      "targets": [
+        {
+          "expr": "sum(rate(microvibe_http_requests_total[1m]))",
+          "legendFormat": "总 QPS"
+        }
+      ],
+      "yaxes": [
+        {"format": "reqps", "label": "请求/秒"},
+        {"show": false}
+      ],
+      "description": "系统整体 QPS，目标峰值 ≥ 2000"
+    },
+    {
+      "title": "请求延迟 - 平均 / P50 / P90 / P99 (ms)",
+      "type": "graph",
+      "gridPos": {"x": 12, "y": 0, "w": 12, "h": 8},
+      "targets": [
+        {
+          "expr": "avg(microvibe_http_request_duration_ms_sum / microvibe_http_request_duration_ms_count)",
+          "legendFormat": "平均"
+        },
+        {
+          "expr": "microvibe_http_request_duration_summary_ms{quantile=\"0.5\"}",
+          "legendFormat": "P50"
+        },
+        {
+          "expr": "microvibe_http_request_duration_summary_ms{quantile=\"0.9\"}",
+          "legendFormat": "P90"
+        },
+        {
+          "expr": "microvibe_http_request_duration_summary_ms{quantile=\"0.99\"}",
+          "legendFormat": "P99"
+        }
+      ],
+      "yaxes": [
+        {"format": "ms", "label": "延迟(ms)"},
+        {"show": false}
+      ],
+      "description": "请求延迟百分位，目标 avg ≤ 150ms, P99 ≤ 500ms"
+    },
+    {
+      "title": "延迟按路径分布 (P99 ms)",
+      "type": "graph",
+      "gridPos": {"x": 0, "y": 8, "w": 12, "h": 8},
+      "targets": [
+        {
+          "expr": "microvibe_http_request_duration_summary_ms{quantile=\"0.99\"}",
+          "legendFormat": "{{method}} {{path}}"
+        }
+      ],
+      "yaxes": [
+        {"format": "ms", "label": "延迟(ms)"},
+        {"show": false}
+      ]
+    },
+    {
+      "title": "错误率",
+      "type": "graph",
+      "gridPos": {"x": 12, "y": 8, "w": 12, "h": 8},
+      "targets": [
+        {
+          "expr": "sum(rate(microvibe_http_requests_total{status=~\"5..\"}[1m])) / sum(rate(microvibe_http_requests_total[1m])) * 100",
+          "legendFormat": "错误率 %"
+        },
+        {
+          "expr": "sum(rate(microvibe_http_requests_total{status=~\"4..\"}[1m])) / sum(rate(microvibe_http_requests_total[1m])) * 100",
+          "legendFormat": "4xx 率 %"
+        }
+      ],
+      "yaxes": [
+        {"format": "percent", "label": "百分比"},
+        {"show": false}
+      ],
+      "description": "错误率目标 < 0.1%（成功率 ≥ 99.9%）"
+    },
+    {
+      "title": "当前并发请求数",
+      "type": "graph",
+      "gridPos": {"x": 0, "y": 16, "w": 8, "h": 8},
+      "targets": [
+        {
+          "expr": "microvibe_http_in_flight_requests",
+          "legendFormat": "并发数"
+        }
+      ],
+      "yaxes": [
+        {"format": "short", "label": "请求数"},
+        {"show": false}
+      ]
+    },
+    {
+      "title": "QPS 按路径分布",
+      "type": "graph",
+      "gridPos": {"x": 8, "y": 16, "w": 8, "h": 8},
+      "targets": [
+        {
+          "expr": "sum(rate(microvibe_http_requests_total[1m])) by (path)",
+          "legendFormat": "{{path}}"
+        }
+      ],
+      "yaxes": [
+        {"format": "reqps", "label": "请求/秒"},
+        {"show": false}
+      ]
+    },
+    {
+      "title": "状态码分布",
+      "type": "graph",
+      "gridPos": {"x": 16, "y": 16, "w": 8, "h": 8},
+      "targets": [
+        {
+          "expr": "sum(rate(microvibe_http_requests_total[1m])) by (status)",
+          "legendFormat": "{{status}}"
+        }
+      ],
+      "yaxes": [
+        {"format": "reqps", "label": "请求/秒"},
+        {"show": false}
+      ]
+    },
+    {
+      "title": "响应大小分布 (字节)",
+      "type": "graph",
+      "gridPos": {"x": 0, "y": 24, "w": 12, "h": 8},
+      "targets": [
+        {
+          "expr": "avg(microvibe_http_response_size_bytes_sum / microvibe_http_response_size_bytes_count)",
+          "legendFormat": "平均响应大小"
+        }
+      ],
+      "yaxes": [
+        {"format": "bytes", "label": "字节"},
+        {"show": false}
+      ]
+    }
+  ],
+  "annotations": {
+    "list": [
+      {
+        "datasource": "Prometheus",
+        "enable": true,
+        "name": "压测事件",
+        "showIn": 0,
+        "type": "dashboard"
+      }
+    ]
+  }
+}

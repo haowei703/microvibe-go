@@ -10,6 +10,7 @@ import (
 	"microvibe-go/pkg/logger"
 
 	"github.com/gin-gonic/gin"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"github.com/redis/go-redis/v9"
 	"go.uber.org/zap"
 	"gorm.io/gorm"
@@ -24,6 +25,12 @@ func Setup(db *gorm.DB, redisClient *redis.Client, cfg *config.Config) *gin.Engi
 
 	// 添加设备信息中间件
 	r.Use(middleware.DeviceMiddleware())
+
+	// Prometheus 指标采集
+	r.Use(middleware.PrometheusMiddleware())
+
+	// Prometheus 指标暴露
+	r.GET("/metrics", gin.WrapH(promhttp.Handler()))
 
 	// 健康检查
 	r.GET("/health", handler.HealthCheck(db, redisClient))
