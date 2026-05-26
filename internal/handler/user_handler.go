@@ -17,14 +17,16 @@ type UserHandler struct {
 	userService    service.UserService
 	visitorService service.UserVisitorService
 	cfg            *config.Config
+	tokenBlacklist *middleware.TokenBlacklist
 }
 
 // NewUserHandler 创建用户处理器实例
-func NewUserHandler(userService service.UserService, visitorService service.UserVisitorService, cfg *config.Config) *UserHandler {
+func NewUserHandler(userService service.UserService, visitorService service.UserVisitorService, cfg *config.Config, blacklist *middleware.TokenBlacklist) *UserHandler {
 	return &UserHandler{
 		userService:    userService,
 		visitorService: visitorService,
 		cfg:            cfg,
+		tokenBlacklist: blacklist,
 	}
 }
 
@@ -266,4 +268,29 @@ func (h *UserHandler) UpdatePrivacySettings(c *gin.Context) {
 	}
 
 	response.SuccessWithMessage(c, "隐私设置更新成功", nil)
+}
+
+// Logout 用户登出，将当前 token 加入黑名单
+func (h *UserHandler) Logout(c *gin.Context) {
+	claims, exists := c.Get("claims")
+	if !exists {
+		response.SuccessWithMessage(c, "已登出", nil)
+		return
+	}
+
+	jwtClaims, ok := claims.(*utils.Claims)
+	if !ok {
+		response.SuccessWithMessage(c, "已登出", nil)
+		return
+	}
+
+	if h.tokenBlacklist != nil {
+		ttl := middleware.TTL(jwtClaims.ExpiresAt.Time)
+		if err := h.tokenBlacklist.Add(c.Request.Context(), jwtClaims.JTI, ttl); err != nil {
+			response.Error(c, response.CodeError, "登出失败")
+			return
+		}
+	}
+
+	response.SuccessWithMessage(c, "登出成功", nil)
 }

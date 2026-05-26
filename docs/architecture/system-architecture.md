@@ -1,569 +1,256 @@
-# 项目架构说明
+# MicroVibe 系统逻辑架构
 
 ## 概述
 
-MicroVibe-Go 采用标准的三层架构设计，类似于 Spring Web 的分层模式，实现了**展示层（Handler）**、**业务逻辑层（Service）**、**数据访问层（Repository）**的清晰分离。
+MicroVibe 平台采用清晰的**四层逻辑架构**设计，从前端表现到数据存储逐层分离关注点，确保系统的高内聚、低耦合与可扩展性。
 
 ## 架构图
 
 ```
-┌──────────────────────────────────────┐
-│         HTTP Request (Gin)           │
-└──────────────────┬───────────────────┘
-                   ↓
-┌──────────────────────────────────────┐
-│      Handler 层 (展示层)              │
-│  - 处理 HTTP 请求和响应               │
-│  - 参数验证                          │
-│  - 调用 Service 层                   │
-└──────────────────┬───────────────────┘
-                   ↓
-┌──────────────────────────────────────┐
-│     Service 层 (业务逻辑层)           │
-│  - 业务逻辑处理                      │
-│  - 事务管理                          │
-│  - 调用 Repository 层                │
-│  - 日志记录                          │
-└──────────────────┬───────────────────┘
-                   ↓
-┌──────────────────────────────────────┐
-│   Repository 层 (数据访问层)          │
-│  - 数据库 CRUD 操作                  │
-│  - 数据持久化                        │
-│  - 查询封装                          │
-└──────────────────┬───────────────────┘
-                   ↓
-┌──────────────────────────────────────┐
-│        Database (PostgreSQL)         │
-└──────────────────────────────────────┘
+┌─────────────────────────────────────────────────────────────────────┐
+│                    表现层 (Presentation Layer)                       │
+│                      基于 Flutter 框架构建                            │
+│  全平台 UI 渲染与交互逻辑 · 自绘引擎 · Android / iOS / Web 统一代码     │
+└──────────────────────────────────┬──────────────────────────────────┘
+                                   │ HTTP / WebSocket / WebRTC
+                                   ▼
+┌─────────────────────────────────────────────────────────────────────┐
+│                接口适配层 (Interface Adapter Layer)                    │
+│                   基于 Go 语言 Gin 框架实现                            │
+│  路由分发 · JWT 安全鉴权 · 请求限流 · 参数校验 · 统一响应格式化          │
+└──────────────────────────────────┬──────────────────────────────────┘
+                                   │ 内部调用
+                                   ▼
+┌─────────────────────────────────────────────────────────────────────┐
+│                 业务逻辑层 (Business Logic Layer)                      │
+│                        系统核心功能模块                                │
+│  ┌──────────┬──────────┬──────────┬──────────┬──────────┐            │
+│  │ 用户管理  │ 视频流处理│AI推荐引擎 │ 社交互动  │ 即时通讯  │            │
+│  │ 注册/登录 │ 上传/转码 │ 召回/排序 │ 点赞/评论 │ 私信/群聊 │            │
+│  │ 个人资料  │ RTMP/HLS │ 特征/过滤 │ 关注/分享 │ 实时推送  │            │
+│  └──────────┴──────────┴──────────┴──────────┴──────────┘            │
+│  ┌──────────┬──────────┬──────────┬──────────┬──────────┐            │
+│  │ 直播管理  │ 搜索发现  │ 内容审核  │ 消息通知  │ 数据统计  │            │
+│  │ WebRTC   │ 热搜/联想 │ 举报/黑名单│ 系统/互动 │ 播放/创作者│           │
+│  │ SFU 转发 │ 标签/话题 │ 管理员后台 │ 事件驱动  │ 实时看板  │            │
+│  └──────────┴──────────┴──────────┴──────────┴──────────┘            │
+│                                                                     │
+│  各模块通过内部函数调用与事件总线（EventBus）进行高效消息通信              │
+└──────────────────────────────────┬──────────────────────────────────┘
+                                   │ 数据访问
+                                   ▼
+┌─────────────────────────────────────────────────────────────────────┐
+│                 数据持久层 (Data Persistence Layer)                    │
+│                                                                     │
+│  ┌──────────────────┐  ┌──────────────────┐  ┌──────────────────┐   │
+│  │ 关系型持久化存储   │  │   高性能缓存       │  │ 分布式对象存储    │   │
+│  │                  │  │                  │  │                  │   │
+│  │ PostgreSQL 16    │  │ Redis 7          │  │ 本地文件系统      │   │
+│  │ GORM ORM 映射    │  │ 内存 LRU 多级缓存 │  │ 视频/图片/音频    │   │
+│  │ 主数据存储        │  │ 热点数据加速      │  │ 静态资源分发      │   │
+│  └──────────────────┘  └──────────────────┘  └──────────────────┘   │
+└─────────────────────────────────────────────────────────────────────┘
 ```
+
+---
 
 ## 各层职责
 
-### 1. Model 层（数据模型）
+### 1. 表现层 (Presentation Layer)
 
-**位置**: `internal/model/`
+**技术栈**: Flutter Framework
 
-**职责**:
-- 定义数据库表结构
-- ORM 映射（GORM）
-- 数据验证标签
+表现层基于 Flutter 框架构建，负责全平台的 UI 渲染与交互逻辑。通过自绘引擎确保 Android、iOS 及 Web 端共享同一套业务代码，实现跨终端的视觉与操作统一。
 
-**示例**:
-```go
-// User 用户模型
-type User struct {
-    ID        uint           `gorm:"primarykey" json:"id"`
-    CreatedAt time.Time      `json:"created_at"`
-    UpdatedAt time.Time      `json:"updated_at"`
-    DeletedAt gorm.DeletedAt `gorm:"index" json:"-"`
+**核心职责**:
+- 跨平台 UI 渲染（Android / iOS / Web）
+- 用户交互与手势处理
+- 视频播放器集成
+- 实时通信（WebSocket 信令、WebRTC 音视频）
+- 本地状态管理与路由导航
+- 与后端 API 数据交互
 
-    Username  string `gorm:"uniqueIndex;size:50;not null" json:"username"`
-    Password  string `gorm:"size:255;not null" json:"-"`
-    Email     string `gorm:"uniqueIndex;size:100" json:"email"`
-    Nickname  string `gorm:"size:50" json:"nickname"`
-    // ...
-}
-```
-
-**特点**:
-- 使用 GORM 标签定义字段约束
-- JSON 序列化控制
-- 软删除支持
+**前端项目**: `microvibe`（独立 Flutter 项目）
 
 ---
 
-### 2. Repository 层（数据访问层）
+### 2. 接口适配层 (Interface Adapter Layer)
 
-**位置**: `internal/repository/`
+**技术栈**: Go + Gin Framework
 
-**职责**:
-- 封装数据库操作
-- 提供 CRUD 接口
-- 查询逻辑封装
-- 数据库事务
+**代码位置**: `internal/handler/`、`internal/middleware/`、`internal/router/`
 
-**设计模式**:
-- 接口 + 实现的方式
-- 依赖注入
+接口适配层基于 Go 语言的 Gin 框架实现，作为前端请求的统一入口。主要负责路由分发、JWT 安全鉴权、请求限流及参数校验。
 
-**示例**:
-```go
-// UserRepository 用户数据访问层接口
-type UserRepository interface {
-    Create(ctx context.Context, user *model.User) error
-    FindByID(ctx context.Context, id uint) (*model.User, error)
-    FindByUsername(ctx context.Context, username string) (*model.User, error)
-    Update(ctx context.Context, user *model.User) error
-    // ...
-}
+**核心职责**:
+- **路由分发**: RESTful API 路由注册与分组管理
+- **安全鉴权**: JWT Token 签发与验证，三级认证链（公开 / 可选登录 / 强制登录 / 管理员）
+- **请求限流**: 接口调用频率控制
+- **参数校验**: 请求体绑定与合法性验证
+- **统一响应**: `{code, message, data}` 标准 JSON 格式
+- **OAuth2 集成**: Authentik OIDC 第三方登录适配
 
-// userRepositoryImpl 实现
-type userRepositoryImpl struct {
-    db *gorm.DB
-}
+**中间件**:
 
-func NewUserRepository(db *gorm.DB) UserRepository {
-    return &userRepositoryImpl{db: db}
-}
+| 中间件 | 功能 |
+|--------|------|
+| CORS | 跨域访问控制 |
+| Device | 设备信息提取（User-Agent 解析） |
+| Auth | JWT 身份验证（Required / Optional / Admin） |
+| Prometheus | 请求指标采集与暴露 |
 
-func (r *userRepositoryImpl) Create(ctx context.Context, user *model.User) error {
-    logger.Debug("创建用户", zap.String("username", user.Username))
-
-    if err := r.db.WithContext(ctx).Create(user).Error; err != nil {
-        logger.Error("创建用户失败", zap.Error(err))
-        return err
-    }
-
-    logger.Info("用户创建成功", zap.Uint("user_id", user.ID))
-    return nil
-}
+**路由分组**:
 ```
-
-**特点**:
-- 接口定义规范
-- 日志记录完善
-- Context 传递
-- 错误处理统一
-
----
-
-### 3. Service 层（业务逻辑层）
-
-**位置**: `internal/service/`
-
-**职责**:
-- 业务逻辑处理
-- 调用 Repository 进行数据操作
-- 事务管理
-- 业务规则验证
-- 日志记录
-
-**示例**:
-```go
-// UserService 用户服务层接口
-type UserService interface {
-    Register(ctx context.Context, req *RegisterRequest) (*model.User, error)
-    Login(ctx context.Context, req *LoginRequest) (*model.User, error)
-    GetUserByID(ctx context.Context, userID uint) (*model.User, error)
-    // ...
-}
-
-// userServiceImpl 实现
-type userServiceImpl struct {
-    userRepo   repository.UserRepository
-    followRepo repository.FollowRepository
-}
-
-func NewUserService(userRepo repository.UserRepository, followRepo repository.FollowRepository) UserService {
-    return &userServiceImpl{
-        userRepo:   userRepo,
-        followRepo: followRepo,
-    }
-}
-
-func (s *userServiceImpl) Register(ctx context.Context, req *RegisterRequest) (*model.User, error) {
-    logger.Info("用户注册请求", zap.String("username", req.Username))
-
-    // 检查用户名是否已存在
-    existUser, err := s.userRepo.FindByUsername(ctx, req.Username)
-    if err == nil && existUser != nil {
-        return nil, errors.New("用户名已存在")
-    }
-
-    // 加密密码
-    hashedPassword, err := utils.HashPassword(req.Password)
-    if err != nil {
-        return nil, errors.New("密码加密失败")
-    }
-
-    // 创建用户
-    user := &model.User{
-        Username: req.Username,
-        Password: hashedPassword,
-        Email:    req.Email,
-        // ...
-    }
-
-    if err := s.userRepo.Create(ctx, user); err != nil {
-        return nil, err
-    }
-
-    logger.Info("用户注册成功", zap.Uint("user_id", user.ID))
-    return user, nil
-}
-```
-
-**特点**:
-- 业务逻辑集中
-- 依赖多个 Repository
-- 统一的错误处理
-- 完善的日志记录
-
----
-
-### 4. Handler 层（展示层/控制器）
-
-**位置**: `internal/handler/`
-
-**职责**:
-- 处理 HTTP 请求
-- 参数验证和绑定
-- 调用 Service 层
-- 组装响应数据
-- 错误处理和响应
-
-**示例**:
-```go
-// UserHandler 用户处理器
-type UserHandler struct {
-    userService service.UserService
-    cfg         *config.Config
-}
-
-func NewUserHandler(userService service.UserService, cfg *config.Config) *UserHandler {
-    return &UserHandler{
-        userService: userService,
-        cfg:         cfg,
-    }
-}
-
-func (h *UserHandler) Register(c *gin.Context) {
-    var req service.RegisterRequest
-    if err := c.ShouldBindJSON(&req); err != nil {
-        response.InvalidParam(c, "参数错误: "+err.Error())
-        return
-    }
-
-    user, err := h.userService.Register(c.Request.Context(), &req)
-    if err != nil {
-        response.Error(c, response.CodeError, err.Error())
-        return
-    }
-
-    // 生成 Token
-    token, err := utils.GenerateToken(user.ID, user.Username, h.cfg.JWT.Secret, h.cfg.JWT.Expire)
-    if err != nil {
-        response.ServerError(c, "生成Token失败")
-        return
-    }
-
-    response.Success(c, gin.H{
-        "user":  user,
-        "token": token,
-    })
-}
-```
-
-**特点**:
-- 简洁明了
-- 参数验证
-- 统一响应格式
-- 错误处理规范
-
----
-
-## 日志系统
-
-### Zap 日志框架
-
-项目使用 Uber 的 **Zap** 日志框架，这是 Go 社区最流行、性能最高的日志库。
-
-**位置**: `pkg/logger/`
-
-**特性**:
-- 高性能（零内存分配）
-- 结构化日志
-- 多种日志级别（Debug、Info、Warn、Error、Fatal）
-- 支持 JSON 和 Console 两种输出格式
-- 自动日志文件切割
-
-**使用示例**:
-```go
-import (
-    "microvibe-go/pkg/logger"
-    "go.uber.org/zap"
-)
-
-// 基础日志
-logger.Info("用户登录成功", zap.Uint("user_id", user.ID))
-logger.Error("数据库连接失败", zap.Error(err))
-
-// 带多个字段
-logger.Debug("处理请求",
-    zap.String("method", "GET"),
-    zap.String("path", "/api/users"),
-    zap.Int("status", 200))
-```
-
-**配置**:
-- **开发环境**: Console 格式，Debug 级别，彩色输出
-- **生产环境**: JSON 格式，Info 级别，输出到文件
-
----
-
-## 依赖注入
-
-项目采用**构造函数注入**的方式实现依赖注入：
-
-```go
-// 在 router.Setup 中初始化各层
-func Setup(db *gorm.DB, redisClient *redis.Client, cfg *config.Config) *gin.Engine {
-    // 1. 初始化 Repository 层
-    userRepo := repository.NewUserRepository(db)
-    followRepo := repository.NewFollowRepository(db)
-
-    // 2. 初始化 Service 层（注入 Repository）
-    userService := service.NewUserService(userRepo, followRepo)
-
-    // 3. 初始化 Handler 层（注入 Service）
-    userHandler := handler.NewUserHandler(userService, cfg)
-
-    // 4. 注册路由
-    v1.POST("/auth/register", userHandler.Register)
-    // ...
-}
-```
-
-**优点**:
-- 清晰的依赖关系
-- 易于测试（可以 Mock）
-- 松耦合
-
----
-
-## 错误处理
-
-### 统一错误响应
-
-**位置**: `pkg/response/`
-
-```go
-// 成功响应
-response.Success(c, data)
-
-// 错误响应
-response.Error(c, code, message)
-response.InvalidParam(c, "参数错误")
-response.Unauthorized(c, "未登录")
-response.NotFound(c, "资源不存在")
-response.ServerError(c, "服务器错误")
-
-// 分页响应
-response.PageSuccess(c, list, total, page, pageSize)
-```
-
-### 响应格式
-
-```json
-{
-    "code": 0,
-    "message": "success",
-    "data": { ... }
-}
+/api/v1/auth/*        — 用户认证（注册/登录）
+/api/v1/oauth/*       — OAuth2 第三方登录
+/api/v1/users/*       — 用户信息与社交关系
+/api/v1/videos/*      — 视频上传/推荐/互动
+/api/v1/comments/*    — 评论管理
+/api/v1/live/*        — 直播管理与 WebSocket 信令
+/api/v1/messages/*    — 即时通讯与 WebSocket 推送
+/api/v1/search/*      — 搜索发现
+/api/v1/hashtags/*    — 话题标签
+/api/v1/categories/*  — 视频分类
+/api/v1/upload/*      — 文件上传
+/api/v1/admin/*       — 管理员后台
+/api/v1/notifications/* — 通知管理
+/api/v1/reports/*     — 举报管理
 ```
 
 ---
 
-## 数据库迁移
+### 3. 业务逻辑层 (Business Logic Layer)
 
-### 自动迁移
+**技术栈**: Go
 
-**位置**: `internal/database/migrate.go`
+**代码位置**: `internal/service/`、`internal/algorithm/`、`pkg/event/`
 
-```bash
-# 执行迁移
-make migrate
+业务逻辑层是系统的核心，包含用户管理、视频流处理、AI 推荐引擎、社交互动、即时通讯等功能模块。各模块通过内部函数调用或高效的消息通信进行交互。
 
-# 或
-go run cmd/migrate/main.go
+**核心功能模块**:
+
+| 模块 | 说明 | 关键能力 |
+|------|------|----------|
+| **用户管理** | 注册、登录、个人资料、隐私设置 | bcrypt 加密、JWT 认证、OAuth2/OIDC |
+| **视频流处理** | 上传、转码、分发、播放 | FFmpeg 转码、RTMP/HLS/FLV 多协议输出 |
+| **AI 推荐引擎** | 个性化推荐算法 | 召回（5策略）→ 特征工程 → 排序 → 过滤 |
+| **社交互动** | 点赞、评论、关注、分享、收藏 | 幂等操作、事务一致性 |
+| **即时通讯** | 私信聊天、实时推送 | WebSocket 长连接、事件驱动推送 |
+| **直播管理** | 直播间管理、WebRTC 信令 | Ion SFU 多人音视频、礼物系统、粉丝团 |
+| **搜索发现** | 全站搜索、热搜、联想建议 | 多维度搜索、搜索历史 |
+| **内容审核** | 举报、黑名单、管理员后台 | 角色权限控制 |
+| **消息通知** | 系统通知、互动通知 | 事件总线异步分发 |
+| **数据统计** | 播放量、创作者数据、实时看板 | Prometheus + Grafana 监控 |
+
+**推荐算法引擎架构** (`internal/algorithm/`):
+
+```
+召回层 (Recall)  ──►  特征工程层 (Feature)  ──►  排序层 (Rank)  ──►  过滤层 (Filter)
+   5 种召回策略             用户+视频特征             多目标融合             去重+黑名单
 ```
 
-**功能**:
-- 自动创建所有表
-- 创建索引
-- 填充初始数据（分类、礼物等）
+**事件驱动通信** (`pkg/event/`):
+
+18 种业务事件通过全局事件总线进行异步分发，4 个 Worker 协程并发处理：
+
+- **用户域**: 注册、登录、更新、删除
+- **视频域**: 上传、发布、删除、播放
+- **互动域**: 点赞、评论、分享、关注/取关
+- **直播域**: 创建、开始、结束、进出房间、礼物、弹幕
+- **系统域**: 错误、警告
 
 ---
 
-## 配置管理
+### 4. 数据持久层 (Data Persistence Layer)
 
-使用 **Viper** 进行配置管理：
+**技术栈**: PostgreSQL + Redis + 本地文件系统
 
-**位置**: `configs/config.yaml`
+数据持久层由关系型持久化存储、高性能缓存及分布式对象存储共同组成。
 
-```yaml
-server:
-  host: "0.0.0.0"
-  port: "8080"
-  mode: "debug"
+**存储组件**:
 
-database:
-  host: "localhost"
-  port: "5432"
-  user: "postgres"
-  password: "postgres"
-  dbname: "microvibe"
+| 存储类型 | 技术 | 用途 |
+|----------|------|------|
+| **关系型持久化存储** | PostgreSQL 16 + GORM | 用户、视频、评论、社交关系等核心业务数据，支持事务、索引、软删除 |
+| **高性能缓存** | Redis 7 + 内存 LRU | 热点数据加速、Session 管理、推荐特征缓存、发布订阅 |
+| **分布式对象存储** | 本地文件系统（可扩展至 OSS/S3） | 视频文件、图片、音频等静态资源 |
 
-jwt:
-  secret: "your-secret-key"
-  expire: 24
+**数据访问模式** (`internal/repository/`):
+
+- **接口+实现分离**: 每个 Repository 定义接口，方便测试与替换
+- **Context 传递**: 全链路上下文追踪
+- **缓存装饰器**: `WithCache` / `WithCacheEvict` / `WithMultiCacheEvict` 自动管理缓存
+- **缓存降级**: 缓存失败自动回源数据库
+
+**多级缓存架构** (`pkg/cache/`):
+
 ```
-
-**特性**:
-- 支持环境变量覆盖
-- 默认值配置
-- 多环境配置
+请求 → 内存缓存 (LRU, 分片锁) → Redis 缓存 (分布式) → PostgreSQL (持久化)
+         ↑ 命中直接返回          ↑ 命中回填内存           ↑ 回源后异步写回
+```
 
 ---
 
-## 项目结构
+## 项目代码结构
 
 ```
-microvibe-go/
-├── cmd/
-│   ├── server/              # 应用入口
-│   └── migrate/             # 数据库迁移工具
+microvibe-go/                     # Go 后端
+├── cmd/server/                   # 应用入口
 ├── internal/
-│   ├── model/               # 数据模型（Model 层）
-│   ├── repository/          # 数据访问层（Repository 层）
-│   ├── service/             # 业务逻辑层（Service 层）
-│   ├── handler/             # HTTP 处理器（Handler 层）
-│   ├── middleware/          # 中间件
-│   ├── router/              # 路由配置
-│   ├── algorithm/           # 推荐算法引擎
-│   ├── config/              # 配置管理
-│   └── database/            # 数据库连接
+│   ├── handler/                  # [接口适配层] HTTP 处理器
+│   ├── middleware/               # [接口适配层] 中间件
+│   ├── router/                   # [接口适配层] 路由注册与依赖注入
+│   ├── service/                  # [业务逻辑层] 业务服务
+│   ├── algorithm/                # [业务逻辑层] AI 推荐引擎
+│   │   ├── recommend/            #   召回引擎
+│   │   ├── feature/              #   特征工程
+│   │   ├── rank/                 #   排序算法
+│   │   └── filter/               #   过滤去重
+│   ├── model/                    # [数据持久层] GORM 数据模型
+│   ├── repository/               # [数据持久层] 数据访问接口
+│   ├── config/                   # 配置管理
+│   └── database/                 # 数据库连接与迁移
 ├── pkg/
-│   ├── logger/              # 日志工具
-│   ├── response/            # 统一响应格式
-│   └── utils/               # 工具函数
-└── configs/                 # 配置文件
+│   ├── cache/                    # 多级缓存框架
+│   ├── event/                    # 事件总线
+│   ├── logger/                   # Zap 日志
+│   ├── media/                    # FFmpeg 媒体处理
+│   ├── response/                 # 统一响应格式
+│   └── utils/                    # 工具函数
+└── configs/                      # YAML 配置文件
+
+microvibe/                        # Flutter 前端（独立项目）
+├── lib/
+│   ├── screens/                  # [表现层] 页面视图
+│   ├── widgets/                  # [表现层] UI 组件
+│   ├── models/                   # 数据模型
+│   ├── services/                 # API 调用与状态管理
+│   └── utils/                    # 工具函数
+└── ...
 ```
 
 ---
 
-## 代码规范
+## 技术栈总览
 
-### 命名规范
-
-- **接口**: 大写字母开头，如 `UserRepository`
-- **实现**: 小写字母开头 + Impl 后缀，如 `userRepositoryImpl`
-- **构造函数**: `New` + 类型名，如 `NewUserRepository`
-
-### 注释规范
-
-- 所有公共接口必须有中文注释
-- 说明函数功能、参数、返回值
-
-```go
-// Create 创建用户
-// ctx: 上下文
-// user: 用户对象
-// 返回: error
-func (r *userRepositoryImpl) Create(ctx context.Context, user *model.User) error
-```
-
-### 日志规范
-
-- 关键操作必须记录日志
-- 使用结构化日志（zap.Field）
-- Debug: 调试信息
-- Info: 正常操作
-- Warn: 警告信息
-- Error: 错误信息
-
-```go
-logger.Info("用户登录成功",
-    zap.Uint("user_id", user.ID),
-    zap.String("username", user.Username))
-```
+| 层级 | 技术 | 说明 |
+|------|------|------|
+| 表现层 | Flutter | 跨平台 UI 框架，自绘引擎 |
+| 接口适配层 | Go + Gin | HTTP 服务框架 |
+| 业务逻辑层 | Go | 核心业务与算法 |
+| 数据持久层 | PostgreSQL + Redis + FS | 关系库 + 缓存 + 文件存储 |
+| 实时通信 | WebSocket + WebRTC (Ion SFU) | 信令 + 音视频流 |
+| 认证 | JWT + Authentik OIDC | 本地认证 + 第三方登录 |
+| 监控 | Prometheus + Grafana | 指标采集与可视化 |
+| 容器化 | Docker Compose | 8 个服务一体化编排 |
 
 ---
 
-## 测试建议
+## 架构设计原则
 
-### 单元测试
-
-每层都应该有独立的单元测试：
-
-```go
-// Repository 层测试
-func TestUserRepository_Create(t *testing.T) {
-    // 使用 test database 或 mock
-}
-
-// Service 层测试（Mock Repository）
-func TestUserService_Register(t *testing.T) {
-    // 使用 Mock Repository
-}
-
-// Handler 层测试（Mock Service）
-func TestUserHandler_Register(t *testing.T) {
-    // 使用 httptest
-}
-```
-
----
-
-## 性能优化
-
-### 1. Repository 层
-
-- 使用预加载（Preload）减少查询次数
-- 合理使用索引
-- 批量操作
-
-### 2. Service 层
-
-- 避免 N+1 查询
-- 使用事务保证一致性
-- 缓存频繁查询的数据
-
-### 3. Handler 层
-
-- 参数验证前置
-- 使用中间件减少重复代码
-- 合理的响应结构
-
----
-
-## 扩展性
-
-### 添加新功能
-
-1. 在 `model/` 中定义数据模型
-2. 在 `repository/` 中实现数据访问接口
-3. 在 `service/` 中实现业务逻辑
-4. 在 `handler/` 中实现 HTTP 处理
-5. 在 `router/` 中注册路由
-
-### 示例：添加评论功能
-
-```bash
-# 1. 定义模型（已有 model/social.go）
-# 2. 创建 Repository
-internal/repository/comment_repository.go
-
-# 3. 创建 Service
-internal/service/comment_service.go
-
-# 4. 创建 Handler
-internal/handler/comment.go
-
-# 5. 注册路由
-internal/router/router.go
-```
-
----
-
-## 总结
-
-MicroVibe-Go 采用清晰的三层架构：
-
-1. **Model 层**: 数据模型定义
-2. **Repository 层**: 数据访问，封装数据库操作
-3. **Service 层**: 业务逻辑，调用 Repository
-4. **Handler 层**: HTTP 处理，调用 Service
-
-配合 **Zap 日志框架**、**依赖注入**、**统一错误处理**，形成了一个结构清晰、易于维护和扩展的项目架构。
+1. **关注点分离**: 四层职责明确，层间通过接口通信，互不侵入
+2. **依赖注入**: 构造函数注入，依赖方向自上而下（表现层 → 适配层 → 业务层 → 持久层）
+3. **接口驱动**: 所有核心组件基于接口定义，支持 Mock 测试与实现替换
+4. **事件驱动**: 跨模块异步通信通过事件总线解耦
+5. **缓存优先**: 多级缓存策略，热点数据内存命中，冷数据 Redis 兜底，回源 PostgreSQL 降级
+6. **安全纵深**: 接口层 JWT 鉴权 + 业务层权限校验 + 数据层参数化查询

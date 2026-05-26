@@ -18,6 +18,8 @@ type Config struct {
 	SFU       SFUConfig
 	WebRTC    WebRTCConfig
 	OAuth     OAuthConfig
+	CORS      CORSConfig
+	RateLimit RateLimitConfig
 }
 
 // ServerConfig 服务器配置
@@ -147,6 +149,18 @@ type AuthentikConfig struct {
 	Scopes       []string `mapstructure:"scopes"`
 }
 
+// CORSConfig CORS 跨域配置
+type CORSConfig struct {
+	AllowedOrigins []string `mapstructure:"allowed_origins"`
+}
+
+// RateLimitConfig 速率限制配置
+type RateLimitConfig struct {
+	Enabled           bool `mapstructure:"enabled"`
+	RequestsPerSecond int  `mapstructure:"requests_per_second"`
+	Burst             int  `mapstructure:"burst"`
+}
+
 func Load() (*Config, error) {
 	viper.SetConfigName("config")
 	viper.SetConfigType("yaml")
@@ -172,8 +186,14 @@ func Load() (*Config, error) {
 	viper.SetDefault("redis.password", "")
 	viper.SetDefault("redis.db", 0)
 
-	viper.SetDefault("jwt.secret", "microvibe-secret-key-change-in-production")
+	viper.SetDefault("jwt.secret", "")
 	viper.SetDefault("jwt.expire", 24)
+
+	viper.SetDefault("cors.allowed_origins", []string{"http://localhost:5173", "http://localhost:3000", "http://localhost:8080"})
+
+	viper.SetDefault("ratelimit.enabled", true)
+	viper.SetDefault("ratelimit.requests_per_second", 100)
+	viper.SetDefault("ratelimit.burst", 200)
 
 	viper.SetDefault("upload.maxsize", 104857600) // 100MB
 	viper.SetDefault("upload.allowedtypes", []string{"video/mp4", "video/avi", "image/jpeg", "image/png"})

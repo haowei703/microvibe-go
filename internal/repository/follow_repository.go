@@ -17,6 +17,8 @@ type FollowRepository interface {
 	Delete(ctx context.Context, userID, followedID uint) error
 	// Exists 检查关注关系是否存在
 	Exists(ctx context.Context, userID, followedID uint) (bool, error)
+	// ExistsBatch 批量检查关注关系是否存在
+	ExistsBatch(ctx context.Context, userID uint, followedIDs []uint) (map[uint]bool, error)
 	// FindFollowings 查找用户关注的人
 	FindFollowings(ctx context.Context, userID uint, limit, offset int) ([]*model.Follow, error)
 	// FindFollowers 查找用户的粉丝
@@ -108,6 +110,35 @@ func (r *followRepositoryImpl) Exists(ctx context.Context, userID, followedID ui
 	}
 
 	return count > 0, nil
+}
+
+// ExistsBatch 批量检查关注关系
+func (r *followRepositoryImpl) ExistsBatch(ctx context.Context, userID uint, followedIDs []uint) (map[uint]bool, error) {
+	if len(followedIDs) == 0 {
+		return make(map[uint]bool), nil
+	}
+
+	var follows []struct {
+		FollowedID uint
+	}
+	if err := r.db.WithContext(ctx).Model(&model.Follow{}).
+		Select("followed_id").
+		Where("user_id = ? AND followed_id IN ?", userID, followedIDs).
+		Find(&follows).Error; err != nil {
+		logger.Error("批量检查关注关系失败",
+			zap.Error(err),
+			zap.Uint("user_id", userID))
+		return nil, err
+	}
+
+	followedMap := make(map[uint]bool, len(followedIDs))
+	for _, id := range followedIDs {
+		followedMap[id] = false
+	}
+	for _, f := range follows {
+		followedMap[f.FollowedID] = true
+	}
+	return followedMap, nil
 }
 
 // FindFollowings 查找用户关注的人

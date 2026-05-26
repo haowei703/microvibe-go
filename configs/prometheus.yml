@@ -8,6 +8,11 @@ scrape_configs:
       - targets: ["host.docker.internal:8080"]
         labels:
           service: "microvibe-app"
+  - job_name: "metrics-sim"
+    static_configs:
+      - targets: ["host.docker.internal:9091"]
+        labels:
+          service: "microvibe-metrics-sim"
   - job_name: "prometheus"
     static_configs:
       - targets: ["localhost:9090"]

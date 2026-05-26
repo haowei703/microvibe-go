@@ -148,7 +148,7 @@ func (h *VideoHandler) GetFriendsFeed(c *gin.Context) {
 	response.PageSuccess(c, enrichedVideos, resp.Total, page, pageSize)
 }
 
-// GetHotFeed 获取热门视频
+// GetHotFeed 获取热门视频（直接使用 hot_score 排序，绕过推荐管道）
 func (h *VideoHandler) GetHotFeed(c *gin.Context) {
 	userID, _ := middleware.GetUserID(c)
 
@@ -161,26 +161,21 @@ func (h *VideoHandler) GetHotFeed(c *gin.Context) {
 		pageSize = 20
 	}
 
-	resp, err := h.recommendEngine.Recommend(c.Request.Context(), &recommend.RecommendRequest{
-		UserID:   userID,
-		Page:     page,
-		PageSize: pageSize,
-		Scene:    "hot",
-	})
-
+	videos, err := h.videoService.GetHotVideos(c.Request.Context(), page, pageSize)
+	total := int64(len(videos))
 	if err != nil {
 		response.ServerError(c, "获取热门视频失败: "+err.Error())
 		return
 	}
 
 	// 丰富视频信息
-	enrichedVideos, err := h.videoService.EnrichVideoList(c.Request.Context(), userID, resp.Videos)
+	enrichedVideos, err := h.videoService.EnrichVideoList(c.Request.Context(), userID, videos)
 	if err != nil {
 		response.ServerError(c, "处理视频信息失败: "+err.Error())
 		return
 	}
 
-	response.PageSuccess(c, enrichedVideos, resp.Total, page, pageSize)
+	response.PageSuccess(c, enrichedVideos, total, page, pageSize)
 }
 
 // CreateVideo 上传视频 (Legacy API via JSON)

@@ -36,15 +36,15 @@ type Video struct {
 	FavoriteCount int64 `gorm:"default:0" json:"favorite_count"`   // 收藏数
 
 	// 推荐算法相关
-	HotScore     float64 `gorm:"default:0;index" json:"hot_score"` // 热度分数
-	QualityScore float64 `gorm:"default:0" json:"quality_score"`   // 质量分数
+	HotScore     float64 `gorm:"default:0;index:idx_hot_query,priority:2" json:"hot_score"` // 热度分数
+	QualityScore float64 `gorm:"default:0" json:"quality_score"`                           // 质量分数
 
 	// 状态
-	Status       int8       `gorm:"default:0;index" json:"status"`     // 状态：0-审核中，1-已发布，2-不通过，3-下架
-	IsPublic     bool       `gorm:"default:true" json:"is_public"`     // 是否公开
-	AllowComment bool       `gorm:"default:true" json:"allow_comment"` // 是否允许评论
-	IsTop        bool       `gorm:"default:false;index" json:"is_top"` // 是否置顶
-	PublishedAt  *time.Time `gorm:"index" json:"published_at"`         // 发布时间
+	Status       int8       `gorm:"default:0;index:idx_hot_query;index:idx_new_query,priority:1" json:"status"` // 状态：0-审核中，1-已发布，2-不通过，3-下架
+	IsPublic     bool       `gorm:"default:true" json:"is_public"`                                               // 是否公开
+	AllowComment bool       `gorm:"default:true" json:"allow_comment"`                                           // 是否允许评论
+	IsTop        bool       `gorm:"default:false;index" json:"is_top"`                                           // 是否置顶
+	PublishedAt  *time.Time `gorm:"index:idx_hot_query,priority:3;index:idx_new_query,priority:2" json:"published_at"` // 发布时间
 
 	// 关联
 	User     *User     `gorm:"foreignKey:UserID" json:"user,omitempty"`

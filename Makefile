@@ -1,4 +1,4 @@
-.PHONY: help build run clean test migrate docker-build docker-up docker-down docker-logs pre-commit-install pre-commit-run fmt openapi-validate openapi-ui
+.PHONY: help build run clean test migrate docker-build docker-up docker-down docker-logs pre-commit-install pre-commit-run fmt openapi-validate openapi-ui security-scan vulncheck security-all security-test-junit
 
 help:
 	@echo "可用命令:"
@@ -16,6 +16,9 @@ help:
 	@echo "  make pre-commit-run     - 手动运行 pre-commit 检查"
 	@echo "  make openapi-validate   - 验证 OpenAPI 文档格式"
 	@echo "  make openapi-ui         - 启动 Swagger UI 预览 API 文档"
+	@echo "  make security-scan      - 运行 gosec 安全扫描"
+	@echo "  make vulncheck          - 运行 govulncheck 依赖漏洞检查"
+	@echo "  make security-all       - 运行所有安全检查和测试"
 
 build:
 	@echo "Building application..."
@@ -111,3 +114,39 @@ openapi-ui:
 		-e SWAGGER_JSON=/app/openapi.json \
 		-v $(PWD)/openapi.json:/app/openapi.json \
 		swaggerapi/swagger-ui
+
+security-scan:
+	@echo "Running gosec security scan..."
+	@if ! command -v gosec &> /dev/null; then \
+		echo "gosec not found. Installing..."; \
+		go install github.com/securecodewarrior/gosec/v2/cmd/gosec@latest; \
+	fi
+	@gosec -fmt=json -out=security-report.json ./... 2>/dev/null || true
+	@gosec ./...
+
+security-scan-sarif:
+	@echo "Running gosec with SARIF output..."
+	@gosec -fmt=sarif -out=security-report.sarif ./... 2>/dev/null || true
+
+vulncheck:
+	@echo "Running govulncheck..."
+	@if ! command -v govulncheck &> /dev/null; then \
+		echo "govulncheck not found. Installing..."; \
+		go install golang.org/x/vuln/cmd/govulncheck@latest; \
+	fi
+	@govulncheck ./...
+
+security-all: security-scan vulncheck
+	@echo "Running security tests..."
+	@go test -v -run "TestJWT|TestPassword|TestAuth|TestCORS|TestSecurity" ./... 2>&1
+	@echo "All security checks completed."
+
+security-report:
+	@echo "Generating HTML security report..."
+	@go run cmd/security-report/main.go
+	@echo "HTML report generated: security-report.html"
+
+security-test-junit:
+	@echo "Generating JUnit XML for security tests..."
+	@go test -json -run "TestJWT|TestPassword|TestAuth|TestCORS|TestSecurity" ./... 2>&1 > security-test-output.json
+	@echo "Test results written to security-test-output.json"

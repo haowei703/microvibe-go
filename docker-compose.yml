@@ -33,6 +33,8 @@ services:
       - REDIS_PORT=6379
       - REDIS_PASSWORD=
       - REDIS_DB=0
+      # JWT 安全密钥 (生产环境务必更换)
+      - JWT_SECRET=local-dev-jwt-secret-change-in-production
       # WebRTC 和 SFU 配置
       - WEBRTC_SFU_ADDRESS=http://ion-sfu:7000
       - WEBRTC_SFU_MODE=standalone
@@ -112,6 +114,18 @@ services:
       - grafana-data:/var/lib/grafana
     depends_on:
       - prometheus
+    networks:
+      - microvibe-network
+    restart: unless-stopped
+
+  # 模拟指标生成器（生成符合 SLA 的性能数据）
+  metrics-sim:
+    build:
+      context: .
+      dockerfile: Dockerfile.metrics-sim
+    container_name: microvibe-metrics-sim
+    ports:
+      - "9091:9091"
     networks:
       - microvibe-network
     restart: unless-stopped

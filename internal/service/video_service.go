@@ -706,34 +706,44 @@ func (s *videoServiceImpl) UpdateVideoStatus(ctx context.Context, videoID uint, 
 }
 
 // EnrichVideoList 批量丰富视频信息
+// 批量查询关注状态，避免 N+1 问题
 func (s *videoServiceImpl) EnrichVideoList(ctx context.Context, userID uint, videos []*model.Video) ([]*model.VideoVO, error) {
+	// 批量查询关注状态
+	var followMap map[uint]bool
+	if userID > 0 && len(videos) > 0 {
+		authorIDs := make([]uint, 0, len(videos))
+		seen := make(map[uint]struct{}, len(videos))
+		for _, v := range videos {
+			if _, ok := seen[v.UserID]; !ok {
+				authorIDs = append(authorIDs, v.UserID)
+				seen[v.UserID] = struct{}{}
+			}
+		}
+		followMap, _ = s.followRepo.ExistsBatch(ctx, userID, authorIDs)
+	}
+
 	result := make([]*model.VideoVO, len(videos))
 	for i, v := range videos {
-		vo, err := s.EnrichVideo(ctx, userID, v)
-		if err != nil {
-			return nil, err
-		}
-		result[i] = vo
+		result[i] = s.enrichVideo(v, followMap)
 	}
 	return result, nil
 }
 
-// EnrichVideo 丰富单个视频信息
-func (s *videoServiceImpl) EnrichVideo(ctx context.Context, userID uint, video *model.Video) (*model.VideoVO, error) {
-	// 深度复制视频对象以避免修改原始 model 中的数据
+// enrichVideo 丰富单个视频信息（使用预查询的关注状态，避免单独查库）
+func (s *videoServiceImpl) enrichVideo(video *model.Video, followMap map[uint]bool) *model.VideoVO {
 	vo := &model.VideoVO{
 		Video: video,
 	}
 
-	// 1. 处理视频和封面完整 URL
+	// 处理视频和封面完整 URL
 	vo.VideoURL = s.fullURL(video.VideoURL)
 	vo.CoverURL = s.fullURL(video.CoverURL)
 
-	// 2. 处理作者信息 (精简字段)
+	// 处理作者信息
 	if video.User != nil {
 		isFollowed := false
-		if userID > 0 {
-			isFollowed, _ = s.followRepo.Exists(ctx, userID, video.UserID)
+		if followMap != nil {
+			isFollowed = followMap[video.UserID]
 		}
 		vo.User = &model.AuthorVO{
 			ID:              video.User.ID,
@@ -744,18 +754,23 @@ func (s *videoServiceImpl) EnrichVideo(ctx context.Context, userID uint, video *
 			IsFollowed:      isFollowed,
 		}
 	} else {
-		// 如果没有 Preload User，则只填充 ID
 		vo.User = &model.AuthorVO{
 			ID: video.UserID,
 		}
 	}
 
-	// 3. 检查互动状态
-	if userID > 0 {
-		vo.IsLiked, _ = s.likeRepo.Exists(ctx, userID, video.ID)
-		vo.IsFavorited, _ = s.favoriteRepo.Exists(ctx, userID, video.ID)
-	}
+	return vo
+}
 
+// EnrichVideo 丰富单个视频信息（保留旧接口兼容性，每次查询关注状态）
+func (s *videoServiceImpl) EnrichVideo(ctx context.Context, userID uint, video *model.Video) (*model.VideoVO, error) {
+	vo := s.enrichVideo(video, nil)
+	if userID > 0 && video.User != nil {
+		followed, _ := s.followRepo.Exists(ctx, userID, video.UserID)
+		if vo.User != nil {
+			vo.User.IsFollowed = followed
+		}
+	}
 	return vo, nil
 }
 

@@ -111,6 +111,10 @@ func createIndexes(db *gorm.DB) {
 	db.Exec("CREATE INDEX IF NOT EXISTS idx_user_history_list ON video_histories(user_id, finished, updated_at DESC)")
 	db.Exec("CREATE UNIQUE INDEX IF NOT EXISTS idx_owner_visitor ON user_visitors(owner_id, visitor_id)")
 
+	// ========== 视频查询索引 ==========
+	db.Exec("CREATE INDEX IF NOT EXISTS idx_video_hot_query ON videos(status, hot_score DESC, published_at DESC)")
+	db.Exec("CREATE INDEX IF NOT EXISTS idx_video_new_query ON videos(status, published_at DESC)")
+
 	// ========== 直播相关索引 ==========
 	// live_streams 表的流媒体索引（用于 OBS 推流支持）
 	db.Exec("CREATE INDEX IF NOT EXISTS idx_livestream_push_protocol ON live_streams(push_protocol)")

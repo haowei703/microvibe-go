@@ -1,7 +1,7 @@
 {
   "title": "MicroVibe 性能监控",
   "uid": "microvibe-performance",
-  "version": 1,
+  "version": 2,
   "timezone": "browser",
   "editable": true,
   "tags": ["microvibe", "performance"],
@@ -14,14 +14,21 @@
       "targets": [
         {
           "expr": "sum(rate(microvibe_http_requests_total[1m]))",
-          "legendFormat": "总 QPS"
+          "legendFormat": "实际 QPS"
+        },
+        {
+          "expr": "microvibe_sla_qps_target",
+          "legendFormat": "SLA 目标 ≥ 2000"
         }
       ],
       "yaxes": [
-        {"format": "reqps", "label": "请求/秒"},
+        {"format": "reqps", "label": "请求/秒", "min": 0},
         {"show": false}
       ],
-      "description": "系统整体 QPS，目标峰值 ≥ 2000"
+      "description": "系统整体 QPS，目标峰值 ≥ 2000",
+      "seriesOverrides": [
+        {"alias": "SLA 目标 ≥ 2000", "dashLength": 5, "fill": 0, "dashes": true, "color": "#FF0000", "op": 5, "linewidth": 2}
+      ]
     },
     {
       "title": "请求延迟 - 平均 / P50 / P90 / P99 (ms)",
@@ -30,7 +37,7 @@
       "targets": [
         {
           "expr": "avg(microvibe_http_request_duration_ms_sum / microvibe_http_request_duration_ms_count)",
-          "legendFormat": "平均"
+          "legendFormat": "平均延迟"
         },
         {
           "expr": "microvibe_http_request_duration_summary_ms{quantile=\"0.5\"}",
@@ -43,13 +50,25 @@
         {
           "expr": "microvibe_http_request_duration_summary_ms{quantile=\"0.99\"}",
           "legendFormat": "P99"
+        },
+        {
+          "expr": "microvibe_sla_latency_avg_target",
+          "legendFormat": "SLA avg ≤ 150ms"
+        },
+        {
+          "expr": "microvibe_sla_latency_p99_target",
+          "legendFormat": "SLA P99 ≤ 500ms"
         }
       ],
       "yaxes": [
-        {"format": "ms", "label": "延迟(ms)"},
+        {"format": "ms", "label": "延迟(ms)", "min": 0},
         {"show": false}
       ],
-      "description": "请求延迟百分位，目标 avg ≤ 150ms, P99 ≤ 500ms"
+      "description": "请求延迟百分位，目标 avg ≤ 150ms, P99 ≤ 500ms",
+      "seriesOverrides": [
+        {"alias": "SLA avg ≤ 150ms", "dashLength": 5, "fill": 0, "dashes": true, "color": "#FFA500", "linewidth": 2},
+        {"alias": "SLA P99 ≤ 500ms", "dashLength": 5, "fill": 0, "dashes": true, "color": "#FF0000", "linewidth": 2}
+      ]
     },
     {
       "title": "延迟按路径分布 (P99 ms)",
@@ -73,15 +92,15 @@
       "targets": [
         {
           "expr": "sum(rate(microvibe_http_requests_total{status=~\"5..\"}[1m])) / sum(rate(microvibe_http_requests_total[1m])) * 100",
-          "legendFormat": "错误率 %"
+          "legendFormat": "5xx 错误率 %"
         },
         {
           "expr": "sum(rate(microvibe_http_requests_total{status=~\"4..\"}[1m])) / sum(rate(microvibe_http_requests_total[1m])) * 100",
-          "legendFormat": "4xx 率 %"
+          "legendFormat": "4xx 错误率 %"
         }
       ],
       "yaxes": [
-        {"format": "percent", "label": "百分比"},
+        {"format": "percent", "label": "百分比", "min": 0},
         {"show": false}
       ],
       "description": "错误率目标 < 0.1%（成功率 ≥ 99.9%）"

@@ -2,10 +2,13 @@ package recommend
 
 import (
 	"context"
+	"encoding/json"
+	"fmt"
 	"microvibe-go/internal/algorithm/feature"
 	"microvibe-go/internal/algorithm/filter"
 	"microvibe-go/internal/algorithm/rank"
 	"microvibe-go/internal/model"
+	"time"
 
 	"github.com/redis/go-redis/v9"
 	"gorm.io/gorm"
@@ -47,9 +50,41 @@ type RecommendResponse struct {
 	Total  int64          // 总数
 }
 
-// Recommend 获取推荐视频
-// 核心推荐流程：召回 -> 特征工程 -> 排序 -> 过滤（场景感知）
+// cacheKey 生成推荐结果缓存键
+func cacheKey(scene string, userID uint, page, pageSize int) string {
+	if userID > 0 {
+		return fmt.Sprintf("recommend:%s:%d:%d:%d", scene, userID, page, pageSize)
+	}
+	return fmt.Sprintf("recommend:%s:anon:%d:%d", scene, page, pageSize)
+}
+
+// cacheTTL 推荐结果缓存过期时间
+func cacheTTL(scene string) time.Duration {
+	switch scene {
+	case "hot":
+		return 30 * time.Second
+	case "feed":
+		return 20 * time.Second
+	default:
+		return 10 * time.Second
+	}
+}
+
+// Recommend 获取推荐视频（带 Redis 缓存）
+// 核心推荐流程：缓存 -> 召回 -> 特征工程 -> 排序 -> 过滤
 func (e *Engine) Recommend(ctx context.Context, req *RecommendRequest) (*RecommendResponse, error) {
+	// 0. 尝试从缓存获取（匿名和热门场景优先走缓存）
+	if e.redis != nil && (req.UserID == 0 || req.Scene == "hot") {
+		key := cacheKey(req.Scene, req.UserID, req.Page, req.PageSize)
+		cached, err := e.redis.Get(ctx, key).Result()
+		if err == nil && cached != "" {
+			var resp RecommendResponse
+			if json.Unmarshal([]byte(cached), &resp) == nil {
+				return &resp, nil
+			}
+		}
+	}
+
 	// 1. 召回阶段：从海量视频中快速召回候选集
 	candidates, err := e.recaller.Recall(ctx, &RecallRequest{
 		UserID: req.UserID,
@@ -100,10 +135,20 @@ func (e *Engine) Recommend(ctx context.Context, req *RecommendRequest) (*Recomme
 		end = len(filteredVideos)
 	}
 
-	return &RecommendResponse{
+	resp := &RecommendResponse{
 		Videos: filteredVideos[start:end],
 		Total:  int64(len(filteredVideos)),
-	}, nil
+	}
+
+	// 异步缓存结果（仅缓存匿名和热门场景）
+	if e.redis != nil && (req.UserID == 0 || req.Scene == "hot") {
+		key := cacheKey(req.Scene, req.UserID, req.Page, req.PageSize)
+		if data, err := json.Marshal(resp); err == nil {
+			e.redis.Set(ctx, key, string(data), cacheTTL(req.Scene))
+		}
+	}
+
+	return resp, nil
 }
 
 // UpdateUserProfile 更新用户画像

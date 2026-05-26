@@ -1,0 +1,178 @@
+{
+  "title": "MicroVibe 安全监控",
+  "uid": "microvibe-security",
+  "version": 1,
+  "timezone": "browser",
+  "editable": true,
+  "tags": ["microvibe", "security"],
+  "refresh": "10s",
+  "panels": [
+    {
+      "title": "认证失败 (按端点和原因)",
+      "type": "graph",
+      "gridPos": {"x": 0, "y": 0, "w": 12, "h": 8},
+      "targets": [
+        {
+          "expr": "sum(rate(microvibe_security_auth_failures_total[1m])) by (endpoint, reason)",
+          "legendFormat": "{{endpoint}} - {{reason}}"
+        }
+      ],
+      "yaxes": [
+        {"format": "reqps", "label": "失败/秒", "min": 0},
+        {"show": false}
+      ],
+      "description": "按端点和原因分类的认证失败率。原因: missing_header, malformed_header, invalid_token, blacklisted, insufficient_role"
+    },
+    {
+      "title": "速率限制命中 (按端点)",
+      "type": "graph",
+      "gridPos": {"x": 12, "y": 0, "w": 12, "h": 8},
+      "targets": [
+        {
+          "expr": "sum(rate(microvibe_security_ratelimit_hits_total[1m])) by (endpoint)",
+          "legendFormat": "{{endpoint}}"
+        }
+      ],
+      "yaxes": [
+        {"format": "reqps", "label": "限流次数/秒", "min": 0},
+        {"show": false}
+      ],
+      "description": "被速率限制拦截的请求数，按端点分类。高值可能表示暴力攻击或爬虫。"
+    },
+    {
+      "title": "Token 验证失败 (按原因)",
+      "type": "graph",
+      "gridPos": {"x": 0, "y": 8, "w": 12, "h": 8},
+      "targets": [
+        {
+          "expr": "sum(rate(microvibe_security_token_validation_failures_total[1m])) by (reason)",
+          "legendFormat": "{{reason}}"
+        }
+      ],
+      "yaxes": [
+        {"format": "reqps", "label": "失败/秒", "min": 0},
+        {"show": false}
+      ],
+      "description": "JWT Token 验证失败次数，按原因分类。持续高位可能表示 token 伪造攻击。"
+    },
+    {
+      "title": "CORS 拦截请求 (按来源)",
+      "type": "graph",
+      "gridPos": {"x": 12, "y": 8, "w": 12, "h": 8},
+      "targets": [
+        {
+          "expr": "sum(rate(microvibe_security_cors_blocked_total[1m])) by (origin)",
+          "legendFormat": "{{origin}}"
+        }
+      ],
+      "yaxes": [
+        {"format": "reqps", "label": "拦截/秒", "min": 0},
+        {"show": false}
+      ],
+      "description": "被 CORS 策略拦截的跨域请求数。高值可能表示 CSRF 攻击尝试。"
+    },
+    {
+      "title": "活跃封禁 IP 数",
+      "type": "graph",
+      "gridPos": {"x": 0, "y": 16, "w": 8, "h": 8},
+      "targets": [
+        {
+          "expr": "microvibe_security_active_blocked_ips",
+          "legendFormat": "{{endpoint}}"
+        }
+      ],
+      "yaxes": [
+        {"format": "short", "label": "封禁数"},
+        {"show": false}
+      ],
+      "description": "当前被速率限制封禁的独立 IP 数量。突增表示攻击。"
+    },
+    {
+      "title": "认证失败率 vs 总请求",
+      "type": "singlestat",
+      "gridPos": {"x": 8, "y": 16, "w": 4, "h": 4},
+      "targets": [
+        {
+          "expr": "sum(rate(microvibe_security_auth_failures_total[1m])) / sum(rate(microvibe_http_requests_total[1m])) * 100",
+          "legendFormat": "认证失败率"
+        }
+      ],
+      "format": "percent",
+      "valueName": "current",
+      "description": "认证失败占所有请求的百分比"
+    },
+    {
+      "title": "速率限制命中率",
+      "type": "singlestat",
+      "gridPos": {"x": 12, "y": 16, "w": 4, "h": 4},
+      "targets": [
+        {
+          "expr": "sum(rate(microvibe_security_ratelimit_hits_total[1m])) / sum(rate(microvibe_http_requests_total[1m])) * 100",
+          "legendFormat": "限流命中率"
+        }
+      ],
+      "format": "percent",
+      "valueName": "current",
+      "description": "速率限制命中占所有请求的百分比"
+    },
+    {
+      "title": "安全相关 4xx/5xx 错误",
+      "type": "graph",
+      "gridPos": {"x": 16, "y": 16, "w": 8, "h": 8},
+      "targets": [
+        {
+          "expr": "sum(rate(microvibe_http_requests_total{status=~\"4..|5..\", path=~\"/api/v1/auth.*|/api/v1/upload.*|/api/v1/admin.*\"}[1m])) by (path, status)",
+          "legendFormat": "{{path}} {{status}}"
+        }
+      ],
+      "yaxes": [
+        {"format": "reqps", "label": "请求/秒", "min": 0},
+        {"show": false}
+      ],
+      "description": "安全敏感端点（认证、上传、管理）的 4xx/5xx 错误"
+    },
+    {
+      "title": "认证失败率趋势",
+      "type": "graph",
+      "gridPos": {"x": 0, "y": 24, "w": 12, "h": 8},
+      "targets": [
+        {
+          "expr": "sum(rate(microvibe_security_auth_failures_total{endpoint=~\"/api/v1/auth/login|/api/v1/auth/register\"}[5m])) by (endpoint)",
+          "legendFormat": "{{endpoint}}"
+        }
+      ],
+      "yaxes": [
+        {"format": "reqps", "label": "失败/秒", "min": 0},
+        {"show": false}
+      ],
+      "description": "登录和注册端点的认证失败趋势。持续上升可能表示撞库或注册攻击。"
+    },
+    {
+      "title": "速率限制详情 (最近5分钟)",
+      "type": "graph",
+      "gridPos": {"x": 12, "y": 24, "w": 12, "h": 8},
+      "targets": [
+        {
+          "expr": "sum(rate(microvibe_security_ratelimit_hits_total[5m])) by (endpoint)",
+          "legendFormat": "{{endpoint}}"
+        }
+      ],
+      "yaxes": [
+        {"format": "reqps", "label": "限流/秒", "min": 0},
+        {"show": false}
+      ],
+      "description": "各端点速率限制命中的详细趋势，用于发现攻击模式。"
+    }
+  ],
+  "annotations": {
+    "list": [
+      {
+        "datasource": "Prometheus",
+        "enable": true,
+        "name": "安全事件",
+        "showIn": 0,
+        "type": "dashboard"
+      }
+    ]
+  }
+}

@@ -21,6 +21,11 @@ func main() {
 		panic("加载配置失败: " + err.Error())
 	}
 
+	// 验证 JWT Secret 安全性
+	if cfg.JWT.Secret == "" || cfg.JWT.Secret == "microvibe-secret-key-change-in-production" {
+		panic("JWT_SECRET 必须设置为安全随机值。请设置环境变量 JWT_SECRET。生成: openssl rand -base64 32")
+	}
+
 	// 初始化日志
 	if err := logger.InitLogger(cfg.Server.Mode); err != nil {
 		panic("初始化日志失败: " + err.Error())

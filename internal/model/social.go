@@ -47,8 +47,8 @@ type Like struct {
 	ID        uint      `gorm:"primarykey" json:"id"`
 	CreatedAt time.Time `json:"created_at"`
 
-	UserID  uint `gorm:"index;not null" json:"user_id"`  // 用户ID
-	VideoID uint `gorm:"index;not null" json:"video_id"` // 视频ID
+	UserID  uint `gorm:"index:idx_like_user_video;not null" json:"user_id"`  // 用户ID
+	VideoID uint `gorm:"index:idx_like_user_video,priority:2;not null" json:"video_id"` // 视频ID
 	Type    int8 `gorm:"default:1" json:"type"`          // 类型：1-点赞，2-踩
 
 	// 组合唯一索引
@@ -144,8 +144,8 @@ type Follow struct {
 	ID        uint      `gorm:"primarykey" json:"id"`
 	CreatedAt time.Time `json:"created_at"`
 
-	UserID     uint `gorm:"index;not null" json:"user_id"`     // 关注者ID
-	FollowedID uint `gorm:"index;not null" json:"followed_id"` // 被关注者ID
+	UserID     uint `gorm:"index:idx_follow_user_target,not null" json:"user_id"`       // 关注者ID
+	FollowedID uint `gorm:"index:idx_follow_user_target,priority:2,not null" json:"followed_id"` // 被关注者ID
 
 	// 关联
 	User     *User `gorm:"foreignKey:UserID" json:"user,omitempty"`
